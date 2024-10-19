@@ -8,14 +8,12 @@ import (
 )
 
 func main() {
-	// Resolve the broadcast address to send messages.
 	broadcastAddr, err := net.ResolveUDPAddr("udp", "255.255.255.255:9933")
 	if err != nil {
 		log.Fatalf("Failed to resolve broadcast address: %v", err)
 	}
 
-	// Listen on a random local UDP port to receive responses.
-	localAddr, err := net.ResolveUDPAddr("udp", ":0") // ":0" chooses a random port.
+	localAddr, err := net.ResolveUDPAddr("udp", ":0")
 	if err != nil {
 		log.Fatalf("Failed to resolve local address: %v", err)
 	}
@@ -28,14 +26,11 @@ func main() {
 
 	log.Printf("Broadcast sender listening on %s...\n", conn.LocalAddr())
 
-	// Create a buffer to receive responses.
 	responseBuf := make([]byte, 256)
 
 	for {
-		// Message to broadcast.
 		message := []byte("BEGIN tomas")
 
-		// Send the broadcast message.
 		_, err := conn.WriteToUDP(message, broadcastAddr)
 		if err != nil {
 			log.Printf("Error sending broadcast: %v", err)
@@ -43,10 +38,8 @@ func main() {
 			log.Printf("Broadcast sent: %s", message)
 		}
 
-		// Set a read deadline to avoid blocking indefinitely.
 		conn.SetReadDeadline(time.Now().Add(5 * time.Second))
 
-		// Listen for a response.
 		n, addr, err := conn.ReadFromUDP(responseBuf)
 		if err != nil {
 			log.Println("No response received:", err)
@@ -65,7 +58,6 @@ func main() {
 			}
 		}
 
-		// Wait 2 seconds before sending the next broadcast.
 		time.Sleep(2 * time.Second)
 	}
 }
