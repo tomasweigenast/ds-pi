@@ -55,7 +55,7 @@ func (d *Discover) begin() {
 	}
 
 	d.conn = conn
-	log.Printf("DISCOVER service started on %s", d.addr.String())
+	log.Printf("Discover service started on broadcast at %s", d.addr.String())
 	d.handleConnection()
 }
 

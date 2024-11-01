@@ -6,6 +6,8 @@ import (
 	"net"
 	"net/http"
 	"net/rpc"
+
+	"ds-pi.com/master/config"
 )
 
 // PCalc provides methods to communicate over TCP sending commands
@@ -13,20 +15,31 @@ import (
 type PCalc struct {
 	ip       net.TCPAddr
 	listener *net.TCPListener
+	calc     *Calc
 }
 
 func NewPCalc(ip string, port int) PCalc {
+	calc := NewCalc()
+	if config.Reset {
+		calc.delete()
+	}
+
+	calc.Restore()
+
 	return PCalc{
 		ip: net.TCPAddr{
 			IP:   net.ParseIP(ip),
 			Port: port,
 		},
+		calc: calc,
 	}
 }
 
 func (p *PCalc) Start() {
-	service := new(Service)
-	rpc.Register(service)
+	calcService := new(CalcRPC)
+	calcService.calc = p.calc
+
+	rpc.Register(calcService)
 	rpc.HandleHTTP()
 
 	listener, err := net.ListenTCP("tcp", &p.ip)
@@ -36,7 +49,7 @@ func (p *PCalc) Start() {
 
 	p.listener = listener
 	go http.Serve(p.listener, nil)
-	log.Printf("RPC server started at %s", p.ip.String())
+	log.Printf("RPC PCalc server started at %s", p.ip.String())
 }
 
 func (p *PCalc) Stop() {
