@@ -121,31 +121,12 @@ func (c *Calc) Restore() {
 		log.Printf("unable to read Calc from bytes: %s", err)
 	}
 
-	c.sanitize()
-
 	log.Printf("Calc restored from file. Jobs [%d] Last Term [%d] Last Job Id [%d]", len(c.Jobs), c.LastTerm, c.LastJobID)
 	for _, job := range c.Jobs {
 		log.Printf("Job %d - Worker [%s] First Term [%d] Term Size [%d] Sent At [%s]", job.ID, job.WorkerName, job.FirstTerm, job.NumTerms, job.SendAt)
 	}
 
 	c.Save()
-}
-
-// sanitize removes completed jobs
-func (c *Calc) sanitize() {
-	completed := make([]uint64, 0, len(c.Jobs))
-	for id, job := range c.Jobs {
-		if job.Completed {
-			completed = append(completed, id)
-		}
-	}
-
-	if len(completed) > 0 {
-		for _, jobId := range completed {
-			delete(c.Jobs, jobId)
-		}
-		log.Printf("Deleted %d jobs. Remaining: %d", len(completed), len(c.Jobs))
-	}
 }
 
 func (c *Calc) delete() {

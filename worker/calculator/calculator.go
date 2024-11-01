@@ -104,9 +104,6 @@ func (c *Calculator) calculate() []byte {
 	log.Printf("until:%d", until)
 	for k := c.job.startTerm; k < until; k++ {
 		term := calculateTerm(k, c.job.precision)
-		// if c.job.id > 1 {
-		// 	log.Printf("Term result:%s", term.String())
-		// }
 		result.Add(result, term)
 	}
 
