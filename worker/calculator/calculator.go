@@ -101,7 +101,6 @@ func (c *Calculator) calculate() []byte {
 
 	result := new(big.Float).SetPrec(uint(c.job.precision) * 2).SetFloat64(0)
 	until := c.job.startTerm + c.job.numTerms
-	log.Printf("until:%d", until)
 	for k := c.job.startTerm; k < until; k++ {
 		term := calculateTerm(k, c.job.precision)
 		result.Add(result, term)
