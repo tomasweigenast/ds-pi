@@ -1,6 +1,9 @@
 package main
 
 import (
+	"log"
+	"math"
+
 	"ds-pi.com/master/config"
 	"ds-pi.com/master/discover"
 	"ds-pi.com/master/pcalc"
@@ -19,6 +22,8 @@ type master struct {
 var m *master
 
 func main() {
+
+	log.Printf("Using max uint: %d", uint(math.MaxUint))
 
 	config.Load()
 

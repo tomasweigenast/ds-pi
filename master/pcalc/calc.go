@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io/fs"
 	"log"
+	"math/big"
 	"os"
 	"sync"
 	"time"
@@ -20,12 +21,15 @@ type Calc struct {
 	Jobs      map[uint64]WorkerJob // List of jobs per worker. Map key is worker name.
 	LastTerm  uint64               // This contain the last term given by the master
 	LastJobID uint64               // keeps track of given job ids
+	PI        *big.Float           // The calculated PI number
 }
 
 func NewCalc() *Calc {
 	return &Calc{
 		mutex: &sync.Mutex{},
 		Jobs:  make(map[uint64]WorkerJob),
+		// PI:    big.NewFloat(0).SetPrec(math.MaxUint),
+		PI: big.NewFloat(0).SetPrec(50_000),
 	}
 }
 
@@ -67,6 +71,16 @@ func (c *Calc) CompleteJob(jobId uint64, result []byte) {
 	job.ReturnedAt = &now
 	job.Result = result
 
+	termPi := big.NewFloat(0).SetPrec(500_000)
+	if err := termPi.GobDecode(job.Result); err != nil {
+		log.Printf("invalid big.Float bytes, ignoring result.")
+		return
+	}
+
+	c.PI.Add(c.PI, termPi)
+	accuracy := c.PI.Acc()
+	log.Printf("Total decimal count: %d. Accuracy: %s", len(c.PI.Text('f', -1)[2:]), accuracy)
+
 	c.Jobs[jobId] = job
 	c.Save()
 }
@@ -77,6 +91,7 @@ type WorkerJob struct {
 	SendAt     time.Time
 	ReturnedAt *time.Time
 	Completed  bool
+	Merged     bool // indicates if Result has been merged in total result
 	WorkerName string
 	FirstTerm  uint64
 	NumTerms   uint64
@@ -132,3 +147,38 @@ func (c *Calc) Restore() {
 func (c *Calc) delete() {
 	os.Remove(filename)
 }
+
+// func (u Calc) MarshalJSON() ([]byte, error) {
+// 	m := make(map[string]any)
+// 	m["jobs"] = u.Jobs
+// 	m["lastTerm"] = u.LastTerm
+// 	m["lastJobId"] = u.LastJobID
+
+// 	pi, err := u.PI.GobEncode()
+// 	if err != nil {
+// 		panic(fmt.Errorf("unable to encode pi: %s", err))
+// 	}
+
+// 	m["pi"] = pi
+// 	m["rawPi"] = u.PI.String()
+// 	return json.Marshal(m)
+// }
+
+// func (u *Calc) UnmarshalJSON(data []byte) error {
+// 	m := struct {
+// 		jobs      map[uint64]WorkerJob
+// 		lastTerm  uint64
+// 		lastJobId uint64
+// 		pi        []byte
+// 	}{}
+// 	if err := json.Unmarshal(data, &m); err != nil {
+// 		return err
+// 	}
+
+// 	fmt.Printf("data: %v", m)
+
+// 	u.Jobs = m.jobs
+// 	u.LastJobID = m.lastJobId
+// 	u.LastTerm = m.lastTerm
+// 	return u.PI.GobDecode(m.pi)
+// }
