@@ -1,8 +1,12 @@
 package main
 
 import (
+	"bufio"
+	"fmt"
 	"log"
 	"math"
+	"os"
+	"strings"
 
 	"ds-pi.com/master/config"
 	"ds-pi.com/master/discover"
@@ -56,6 +60,8 @@ func main() {
 		m.wr.Clean()
 	}()
 
+	go commands()
+
 	// block app
 	select {}
 }
@@ -64,5 +70,30 @@ func main() {
 func onPing(w *registry.Worker) {
 	if !w.Available && w.UnavailableCount > 30 {
 		m.wr.RemoveWorker(w.Name())
+	}
+}
+
+func commands() {
+	scanner := bufio.NewScanner(os.Stdin)
+
+	fmt.Println("Listening for commands. Type 'exit' to quit.")
+	for scanner.Scan() {
+		command := strings.TrimSpace(scanner.Text())
+
+		switch command {
+		case "pi":
+			pi := m.pcalc.GetPI().Text('f', -1)
+			decimalCount := len(pi[2:])
+			fmt.Printf("PI (decimals = %d): %s", decimalCount, pi)
+			break
+
+		case "exit":
+			os.Exit(0)
+			break
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		fmt.Fprintln(os.Stderr, "error reading input:", err)
 	}
 }

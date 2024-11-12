@@ -3,6 +3,7 @@ package pcalc
 import (
 	"fmt"
 	"log"
+	"math/big"
 	"net"
 	"net/http"
 	"net/rpc"
@@ -16,6 +17,10 @@ type PCalc struct {
 	ip       net.TCPAddr
 	listener *net.TCPListener
 	calc     *Calc
+}
+
+func (p *PCalc) GetPI() *big.Float {
+	return p.calc.PI
 }
 
 func NewPCalc(ip string, port int) PCalc {

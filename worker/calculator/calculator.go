@@ -25,7 +25,7 @@ type currentJob struct {
 	numTerms  uint64
 	result    big.Float
 	completed bool
-	precision uint32
+	precision uint
 }
 
 func NewCalculator(workerName string, masterIP net.IP, port int) Calculator {
@@ -85,7 +85,7 @@ func (c *Calculator) askJob() bool {
 
 		nota: la precision no puede ser mayor que un uint32 (tecnicamente limitado por la memoria del sistema)
 	*/
-	precision := uint32(math.Log2(float64(reply.NumTerms))+1000*3.32) * 3
+	precision := uint(math.Log2(float64(reply.NumTerms))+1000*3.32) * 3
 	c.job = &currentJob{
 		id:        reply.JobID,
 		startTerm: reply.StartTerm,
@@ -120,8 +120,9 @@ func (c *Calculator) calculate() []byte {
 
 func (c *Calculator) send(buffer []byte) bool {
 	args := &shared.GiveArgs{
-		JobID:  c.job.id,
-		Result: buffer,
+		JobID:     c.job.id,
+		Result:    buffer,
+		Precision: c.job.precision,
 	}
 	var reply shared.GiveReply
 	err := c.client.Call("CalcRPC.Give", args, &reply)
@@ -134,7 +135,7 @@ func (c *Calculator) send(buffer []byte) bool {
 	return true
 }
 
-func calculateTerm(k uint64, precision uint32) *big.Float {
+func calculateTerm(k uint64, precision uint) *big.Float {
 	// Se crea un nuevo numero para guardar el resultado
 	term := new(big.Float).SetPrec(uint(precision))
 

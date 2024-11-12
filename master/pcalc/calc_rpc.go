@@ -22,6 +22,6 @@ func (s *CalcRPC) Ask(args *shared.AskArgs, reply *shared.AskReply) error {
 
 // Give returns a calculates range of terms to the master
 func (s *CalcRPC) Give(args *shared.GiveArgs, reply *shared.GiveReply) error {
-	s.calc.CompleteJob(args.JobID, args.Result)
+	s.calc.CompleteJob(args.JobID, args.Result, args.Precision)
 	return nil
 }

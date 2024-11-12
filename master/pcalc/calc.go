@@ -8,6 +8,7 @@ import (
 	"math/big"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"ds-pi.com/master/config"
@@ -22,6 +23,7 @@ type Calc struct {
 	LastTerm  uint64               // This contain the last term given by the master
 	LastJobID uint64               // keeps track of given job ids
 	PI        *big.Float           // The calculated PI number
+	Counter   *atomic.Uint32
 }
 
 func NewCalc() *Calc {
@@ -29,7 +31,8 @@ func NewCalc() *Calc {
 		mutex: &sync.Mutex{},
 		Jobs:  make(map[uint64]WorkerJob),
 		// PI:    big.NewFloat(0).SetPrec(math.MaxUint),
-		PI: big.NewFloat(0).SetPrec(50_000),
+		PI:      big.NewFloat(0).SetPrec(50_000),
+		Counter: &atomic.Uint32{},
 	}
 }
 
@@ -56,7 +59,7 @@ func (c *Calc) GetNewJob(workerName string) WorkerJob {
 	return job
 }
 
-func (c *Calc) CompleteJob(jobId uint64, result []byte) {
+func (c *Calc) CompleteJob(jobId uint64, result []byte, precision uint) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
@@ -71,18 +74,39 @@ func (c *Calc) CompleteJob(jobId uint64, result []byte) {
 	job.ReturnedAt = &now
 	job.Result = result
 
-	termPi := big.NewFloat(0).SetPrec(500_000)
+	termPi := big.NewFloat(0).SetPrec(precision)
 	if err := termPi.GobDecode(job.Result); err != nil {
 		log.Printf("invalid big.Float bytes, ignoring result.")
 		return
 	}
 
-	c.PI.Add(c.PI, termPi)
-	accuracy := c.PI.Acc()
-	log.Printf("Total decimal count: %d. Accuracy: %s", len(c.PI.Text('f', -1)[2:]), accuracy)
+	tempPI := new(big.Float).SetPrec(c.PI.Prec())
+	tempPI.Copy(c.PI)
 
+	for {
+		tempPI.Add(tempPI, termPi)
+		accuracy := tempPI.Acc()
+		decimalCount := len(tempPI.Text('f', -1)[2:])
+
+		log.Printf("Total decimal count: %d. Accuracy: %s", decimalCount, accuracy)
+
+		if accuracy == big.Exact {
+			c.PI.Copy(tempPI)
+			break
+		}
+
+		currentPrecision := tempPI.Prec()
+		newPrecision := currentPrecision * 5
+		tempPI.SetPrec(newPrecision)
+		log.Printf("Increased temporary PI precision to %d bits to meet accuracy requirements. Reached max: %t", newPrecision, newPrecision > big.MaxPrec)
+
+		c.PI.Copy(tempPI)
+	}
+
+	job.Merged = true
 	c.Jobs[jobId] = job
 	c.Save()
+
 }
 
 // WorkerJob contains information about the job sent to a worker
