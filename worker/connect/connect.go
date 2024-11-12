@@ -42,7 +42,7 @@ func Connect(workerName string) net.IP {
 			log.Printf("Broadcast sent: %s", message)
 		}
 
-		conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+		conn.SetReadDeadline(time.Now().Add(1 * time.Minute))
 
 		n, addr, err := conn.ReadFromUDP(responseBuf)
 		if err != nil {
