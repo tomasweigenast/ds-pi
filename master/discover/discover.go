@@ -63,7 +63,7 @@ func (d *Discover) handleConnection() {
 	buffer := make([]byte, 24)
 	response := make([]byte, 0, 24)
 	for {
-		log.Printf("Checking for new connections...")
+		log.Println("Checking for new connections...")
 		n, remoteAddr, err := d.conn.ReadFromUDP(buffer)
 		if err != nil {
 			log.Printf("Error reading from UDP: %s", err)
