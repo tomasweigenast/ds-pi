@@ -81,7 +81,7 @@ func (d *Discover) handleConnection() {
 			log.Printf("Received BEGIN from %s. Name: %s", remoteAddr, name)
 
 			// clear response buffer before set new values
-			clear(response)
+			buffer = buffer[:0]
 
 			// check onDiscover
 			if d.onDiscover(remoteAddr, name) {
