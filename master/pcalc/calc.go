@@ -18,7 +18,9 @@ const filename = "pcalc.state"
 
 // Calc keeps track of calculations, terms and workers available
 type Calc struct {
-	mutex     *sync.Mutex
+	jobMutex  sync.Mutex
+	sumMutex  sync.Mutex
+	saveMutex sync.Mutex
 	Jobs      map[uint64]WorkerJob // List of jobs per worker. Map key is worker name.
 	LastTerm  uint64               // This contain the last term given by the master
 	LastJobID uint64               // keeps track of given job ids
@@ -28,8 +30,10 @@ type Calc struct {
 
 func NewCalc() *Calc {
 	return &Calc{
-		mutex: &sync.Mutex{},
-		Jobs:  make(map[uint64]WorkerJob),
+		jobMutex:  sync.Mutex{},
+		saveMutex: sync.Mutex{},
+		sumMutex:  sync.Mutex{},
+		Jobs:      make(map[uint64]WorkerJob),
 		// PI:    big.NewFloat(0).SetPrec(math.MaxUint),
 		PI:      big.NewFloat(0).SetPrec(50_000),
 		Counter: &atomic.Uint32{},
@@ -37,8 +41,8 @@ func NewCalc() *Calc {
 }
 
 func (c *Calc) GetNewJob(workerName string) WorkerJob {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
+	c.jobMutex.Lock()
+	defer c.jobMutex.Unlock()
 
 	startTerm := c.LastTerm
 	jobId := c.LastJobID
@@ -55,13 +59,13 @@ func (c *Calc) GetNewJob(workerName string) WorkerJob {
 	c.LastJobID++
 	c.LastTerm = job.FirstTerm + config.TermSize
 
-	c.Save()
+	go c.Save()
 	return job
 }
 
 func (c *Calc) CompleteJob(jobId uint64, result []byte, precision uint) {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
+	c.sumMutex.Lock()
+	defer c.sumMutex.Unlock()
 
 	job, ok := c.Jobs[jobId]
 	if !ok {
@@ -79,6 +83,7 @@ func (c *Calc) CompleteJob(jobId uint64, result []byte, precision uint) {
 		log.Printf("invalid big.Float bytes, ignoring result.")
 		return
 	}
+	job.ResultString = termPi.Text('f', -1)
 
 	tempPI := new(big.Float).SetPrec(c.PI.Prec())
 	tempPI.Copy(c.PI)
@@ -105,25 +110,28 @@ func (c *Calc) CompleteJob(jobId uint64, result []byte, precision uint) {
 
 	job.Merged = true
 	c.Jobs[jobId] = job
-	c.Save()
-
+	go c.Save()
 }
 
 // WorkerJob contains information about the job sent to a worker
 type WorkerJob struct {
-	ID         uint64
-	SendAt     time.Time
-	ReturnedAt *time.Time
-	Completed  bool
-	Merged     bool // indicates if Result has been merged in total result
-	WorkerName string
-	FirstTerm  uint64
-	NumTerms   uint64
-	Result     []byte
+	ID           uint64
+	SendAt       time.Time
+	ReturnedAt   *time.Time
+	Completed    bool
+	Merged       bool // indicates if Result has been merged in total result
+	WorkerName   string
+	FirstTerm    uint64
+	NumTerms     uint64
+	Result       []byte
+	ResultString string
 }
 
 // Save saves the instance to a file. Save do not lock the mutex.
 func (c *Calc) Save() {
+	c.saveMutex.Lock()
+	defer c.saveMutex.Unlock()
+
 	// var buf bytes.Buffer
 	// err := gob.NewEncoder(&buf).Encode(c)
 	buf, err := json.MarshalIndent(c, "", "   ")
@@ -141,8 +149,8 @@ func (c *Calc) Save() {
 
 // Restore restores the state of Calc from a file, if exists
 func (c *Calc) Restore() {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
+	c.jobMutex.Lock()
+	defer c.jobMutex.Unlock()
 
 	file, err := os.OpenFile(filename, os.O_RDONLY, os.ModePerm)
 	if err != nil {
@@ -165,7 +173,7 @@ func (c *Calc) Restore() {
 		log.Printf("Job %d - Worker [%s] First Term [%d] Term Size [%d] Sent At [%s]", job.ID, job.WorkerName, job.FirstTerm, job.NumTerms, job.SendAt)
 	}
 
-	c.Save()
+	go c.Save()
 }
 
 func (c *Calc) delete() {
