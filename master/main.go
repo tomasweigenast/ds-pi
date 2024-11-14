@@ -44,8 +44,8 @@ func main() {
 	m.ping = ping.NewPingService(&m.wr, onPing)
 
 	// Start the discovering service
-	m.discover.OnDiscover(m.wr.AddWorker)
-	m.discover.Begin()
+	// m.discover.OnDiscover(m.wr.AddWorker)
+	// m.discover.Begin()
 
 	// Start the pcalc service
 	m.pcalc.Start()
@@ -56,7 +56,7 @@ func main() {
 	defer func() {
 		m.ping.Stop()
 		m.pcalc.Stop()
-		m.discover.Stop()
+		// m.discover.Stop()
 		m.wr.Clean()
 	}()
 
