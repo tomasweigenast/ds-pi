@@ -1,10 +1,9 @@
 package main
 
 import (
+	"flag"
 	"log"
 	"net"
-	"os"
-	"strings"
 
 	"ds-pi.com/master/shared"
 	"ds-pi.com/worker/calculator"
@@ -13,27 +12,18 @@ import (
 
 func main() {
 	var workerName string
-	var masterIP net.IP
+	var masterIP string
 
-	args := os.Args
-	for _, arg := range args {
-		if strings.HasPrefix(arg, "--name:") {
-			parts := strings.Split(arg, ":")
-			if len(parts) == 2 && len(parts[1]) <= 10 {
-				workerName = parts[1]
-			}
-		}
-
-		if strings.HasPrefix(arg, "--ip:") {
-			parts := strings.Split(arg, ":")
-			if len(parts) == 2 && len(parts[1]) <= 10 {
-				masterIP = net.ParseIP(parts[1])
-			}
-		}
-	}
+	flag.StringVar(&workerName, "name", "", "")
+	flag.StringVar(&masterIP, "ip", "", "")
+	flag.Parse()
 
 	if len(workerName) == 0 {
-		panic("workerName not specified. Specify with --name:[name]")
+		panic("workerName not specified. Specify with -name=[name]")
+	}
+
+	if len(masterIP) == 0 {
+		panic("masterIP not specified. Specify with -ip=[ip]")
 	}
 
 	ip, err := shared.GetIPv4()
@@ -43,6 +33,7 @@ func main() {
 
 	log.Printf("Worker Name: %s", workerName)
 	log.Printf("Using IP: %s", ip.String())
+	log.Printf("Master IP: %s", masterIP)
 
 	pingServer := ping.NewPingServer(ip.String(), shared.PING_PORT)
 	pingServer.Start()
@@ -50,7 +41,7 @@ func main() {
 	// resolve masterIP
 	// masterIP := connect.Connect(workerName)
 
-	calculator := calculator.NewCalculator(workerName, masterIP, shared.PCALC_PORT)
+	calculator := calculator.NewCalculator(workerName, net.ParseIP(masterIP), shared.PCALC_PORT)
 	calculator.Run()
 
 	defer func() {
