@@ -45,6 +45,8 @@ func Connect(workerName string) net.IP {
 		conn.SetReadDeadline(time.Now().Add(1 * time.Minute))
 
 		n, addr, err := conn.ReadFromUDP(responseBuf)
+		log.Printf("Received response from address %s. Amount of bytes: %d. Error: %s", addr, n, err)
+
 		if err != nil {
 			log.Println("No response received:", err)
 		} else {

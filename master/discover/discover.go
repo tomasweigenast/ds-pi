@@ -63,6 +63,10 @@ func (d *Discover) handleConnection() {
 	buffer := make([]byte, 24)
 	response := make([]byte, 0, 24)
 	for {
+		// clear response buffer before set new values
+		buffer = buffer[:0]
+		response = response[:0]
+
 		log.Println("Checking for new connections...")
 		n, remoteAddr, err := d.conn.ReadFromUDP(buffer)
 		if err != nil {
@@ -80,9 +84,6 @@ func (d *Discover) handleConnection() {
 		if command == keyword_BEGIN {
 			name := messageParts[1]
 			log.Printf("Received BEGIN from %s. Name: %s", remoteAddr, name)
-
-			// clear response buffer before set new values
-			buffer = buffer[:0]
 
 			// check onDiscover
 			if d.onDiscover(remoteAddr, name) {
