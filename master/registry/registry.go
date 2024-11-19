@@ -1,9 +1,13 @@
 package registry
 
 import (
+	"fmt"
+	"log"
 	"net"
 	"net/rpc"
 	"sync"
+
+	"ds-pi.com/master/shared"
 )
 
 // WorkerRegistry keeps track of workers registered in the master
@@ -13,7 +17,7 @@ type WorkerRegistry struct {
 }
 
 type Worker struct {
-	remoteConn net.UDPAddr
+	remoteConn net.IP
 	name       string
 
 	PingClient       *rpc.Client
@@ -22,7 +26,7 @@ type Worker struct {
 }
 
 func (w *Worker) IP() net.IP {
-	return w.remoteConn.IP
+	return w.remoteConn
 }
 
 func (w *Worker) Name() string {
@@ -36,63 +40,34 @@ func NewWorkerRegistry() WorkerRegistry {
 	}
 }
 
-func (wr *WorkerRegistry) AddWorker(addr *net.UDPAddr, name string) bool {
-	wr.mutex.Lock()
-	defer wr.mutex.Unlock()
+func (w *WorkerRegistry) GetWorker(ip string) string {
+	w.mutex.Lock()
+	defer w.mutex.Unlock()
 
-	if _, ok := wr.workers[name]; ok {
-		return false
-	}
-
-	wr.workers[name] = Worker{
-		remoteConn: *addr,
+	name := fmt.Sprintf("worker-%s", shared.RandomString())
+	w.workers[name] = Worker{
 		name:       name,
+		remoteConn: net.ParseIP(ip),
 		Available:  true,
 	}
-	return true
+	log.Printf("Worker %q added at %s", name, ip)
+
+	return name
 }
 
-func (wr *WorkerRegistry) RemoveWorker(name string) {
-	wr.mutex.Lock()
-	defer wr.mutex.Unlock()
+func (w *WorkerRegistry) Delete(name string) {
+	w.mutex.Lock()
+	defer w.mutex.Unlock()
 
-	worker, ok := wr.workers[name]
-	if ok && worker.PingClient != nil {
-		worker.PingClient.Close()
-	}
-
-	delete(wr.workers, name)
+	delete(w.workers, name)
+	log.Printf("Worker %q deleted", name)
 }
 
-func (wr *WorkerRegistry) GetWorker(addr *net.UDPAddr) *Worker {
-	worker, ok := wr.workers[addr.String()]
-	if !ok {
-		return nil
+func (w *WorkerRegistry) ListWorkers() []*Worker {
+	list := make([]*Worker, 0, len(w.workers))
+	for _, worker := range w.workers {
+		list = append(list, &worker)
 	}
 
-	return &worker
-}
-
-func (wr *WorkerRegistry) GetWorkers() []*Worker {
-	wr.mutex.RLock()
-	defer wr.mutex.RUnlock()
-
-	workers := make([]*Worker, 0, len(wr.workers))
-	for _, w := range wr.workers {
-		workers = append(workers, &w)
-	}
-	return workers
-}
-
-func (wr *WorkerRegistry) Clean() {
-	wr.mutex.Lock()
-	defer wr.mutex.Unlock()
-
-	for _, w := range wr.workers {
-		if w.PingClient != nil {
-			w.PingClient.Close()
-		}
-	}
-
-	clear(wr.workers)
+	return list
 }

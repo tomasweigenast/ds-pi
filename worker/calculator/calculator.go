@@ -28,9 +28,8 @@ type currentJob struct {
 	precision uint
 }
 
-func NewCalculator(workerName string, masterIP net.IP, port int) Calculator {
+func NewCalculator(masterIP net.IP, port int) Calculator {
 	return Calculator{
-		workerName: workerName,
 		masterAddr: net.TCPAddr{
 			IP:   masterIP,
 			Port: port,
@@ -46,6 +45,13 @@ func (c *Calculator) Run() {
 	}
 
 	c.client = client
+
+	// connect
+	if err := c.connect(); err != nil {
+		log.Fatalf("unable to connect to master: %s", err)
+	}
+
+	// ask jobs
 	for {
 		if c.askJob() {
 			if result := c.calculate(); result != nil {
@@ -60,6 +66,25 @@ func (c *Calculator) Stop() {
 		c.client.Close()
 		c.client = nil
 	}
+}
+
+func (c *Calculator) connect() error {
+	myIP, err := shared.GetIPv4()
+	if err != nil {
+		return err
+	}
+
+	args := &shared.ConnectArgs{WorkerIP: myIP.String()}
+	var reply shared.ConnectReply
+	err = c.client.Call("CalcRPC.Connect", args, &reply)
+	if err != nil {
+		return err
+	}
+
+	c.workerName = reply.WorkerName
+	log.Printf("My name is: %s", c.workerName)
+
+	return nil
 }
 
 func (c *Calculator) askJob() bool {

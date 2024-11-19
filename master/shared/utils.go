@@ -3,6 +3,9 @@ package shared
 import (
 	"fmt"
 	"net"
+	"time"
+
+	"golang.org/x/exp/rand"
 )
 
 const PING_PORT = 8989
@@ -41,4 +44,16 @@ func GetIPv4() (net.IP, error) {
 	}
 
 	return nil, fmt.Errorf("no non-loopback IPv4 address found")
+}
+
+const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
+// RandomString generates a random string of the specified length
+func RandomString() string {
+	seededRand := rand.New(rand.NewSource(uint64(time.Now().UnixNano())))
+	b := make([]byte, 10)
+	for i := range b {
+		b[i] = charset[seededRand.Intn(len(charset))]
+	}
+	return string(b)
 }

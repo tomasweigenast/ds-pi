@@ -9,6 +9,7 @@ import (
 	"net/rpc"
 
 	"ds-pi.com/master/config"
+	"ds-pi.com/master/registry"
 )
 
 // PCalc provides methods to communicate over TCP sending commands
@@ -17,13 +18,14 @@ type PCalc struct {
 	ip       net.TCPAddr
 	listener *net.TCPListener
 	calc     *Calc
+	registry *registry.WorkerRegistry
 }
 
 func (p *PCalc) GetPI() *big.Float {
 	return p.calc.PI
 }
 
-func NewPCalc(ip string, port int) PCalc {
+func NewPCalc(ip string, port int, wr *registry.WorkerRegistry) PCalc {
 	calc := NewCalc()
 	if config.Reset {
 		calc.delete()
@@ -36,13 +38,15 @@ func NewPCalc(ip string, port int) PCalc {
 			IP:   net.ParseIP(ip),
 			Port: port,
 		},
-		calc: calc,
+		calc:     calc,
+		registry: wr,
 	}
 }
 
 func (p *PCalc) Start() {
 	calcService := new(CalcRPC)
 	calcService.calc = p.calc
+	calcService.reg = p.registry
 
 	rpc.Register(calcService)
 	rpc.HandleHTTP()

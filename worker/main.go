@@ -11,16 +11,10 @@ import (
 )
 
 func main() {
-	var workerName string
 	var masterIP string
 
-	flag.StringVar(&workerName, "name", "", "")
 	flag.StringVar(&masterIP, "ip", "", "")
 	flag.Parse()
-
-	if len(workerName) == 0 {
-		panic("workerName not specified. Specify with -name=[name]")
-	}
 
 	if len(masterIP) == 0 {
 		panic("masterIP not specified. Specify with -ip=[ip]")
@@ -31,7 +25,6 @@ func main() {
 		panic(err)
 	}
 
-	log.Printf("Worker Name: %s", workerName)
 	log.Printf("Using IP: %s", ip.String())
 	log.Printf("Master IP: %s", masterIP)
 
@@ -41,7 +34,7 @@ func main() {
 	// resolve masterIP
 	// masterIP := connect.Connect(workerName)
 
-	calculator := calculator.NewCalculator(workerName, net.ParseIP(masterIP), shared.PCALC_PORT)
+	calculator := calculator.NewCalculator(net.ParseIP(masterIP), shared.PCALC_PORT)
 	calculator.Run()
 
 	defer func() {

@@ -3,11 +3,13 @@ package pcalc
 import (
 	"log"
 
+	"ds-pi.com/master/registry"
 	"ds-pi.com/master/shared"
 )
 
 type CalcRPC struct {
 	calc *Calc
+	reg  *registry.WorkerRegistry
 }
 
 // Ask gives a range of terms to calculate to a worker.
@@ -23,5 +25,12 @@ func (s *CalcRPC) Ask(args *shared.AskArgs, reply *shared.AskReply) error {
 // Give returns a calculates range of terms to the master
 func (s *CalcRPC) Give(args *shared.GiveArgs, reply *shared.GiveReply) error {
 	s.calc.CompleteJob(args.JobID, args.Result, args.Precision)
+	return nil
+}
+
+func (s *CalcRPC) Connect(args *shared.ConnectArgs, reply *shared.ConnectReply) error {
+	log.Printf("Connect request from worker")
+	workerName := s.reg.GetWorker(args.WorkerIP)
+	reply.WorkerName = workerName
 	return nil
 }
