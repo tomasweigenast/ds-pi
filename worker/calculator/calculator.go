@@ -16,7 +16,9 @@ type Calculator struct {
 	client     *rpc.Client
 	workerName string
 
-	job *currentJob
+	job    *currentJob
+	ticker *time.Ticker
+	stopCh chan struct{}
 }
 
 type currentJob struct {
@@ -34,22 +36,20 @@ func NewCalculator(masterIP net.IP, port int) Calculator {
 			IP:   masterIP,
 			Port: port,
 		},
+		ticker: time.NewTicker(time.Second * 5),
 	}
 }
 
 func (c *Calculator) Run() {
-	client, err := rpc.DialHTTP("tcp", c.masterAddr.String())
-	if err != nil {
-		log.Fatalf("failed to dial tcp to master: %s", err)
-		return
-	}
-
-	c.client = client
+	c.createClient()
 
 	// connect
 	if err := c.connect(); err != nil {
 		log.Fatalf("unable to connect to master: %s", err)
 	}
+
+	// start pinging
+	c.ping()
 
 	// ask jobs
 	for {
@@ -66,6 +66,39 @@ func (c *Calculator) Stop() {
 		c.client.Close()
 		c.client = nil
 	}
+}
+
+func (c *Calculator) createClient() {
+	client, err := rpc.DialHTTP("tcp", c.masterAddr.String())
+	if err != nil {
+		log.Fatalf("failed to dial tcp to master: %s", err)
+		return
+	}
+
+	c.client = client
+}
+
+func (c *Calculator) ping() {
+	go func() {
+		for {
+			select {
+			case <-c.ticker.C:
+				if c.client != nil {
+					args := &shared.PingArgs{
+						WorkerName: c.workerName,
+					}
+					reply := shared.PingResponse{}
+					if err := c.client.Call("CalcRPC.Ping", args, &reply); err != nil {
+						log.Printf("Unable to ping master: %s", err)
+					}
+				}
+
+			case <-c.stopCh:
+				c.ticker.Stop()
+				return
+			}
+		}
+	}()
 }
 
 func (c *Calculator) connect() error {
