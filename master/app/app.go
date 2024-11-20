@@ -96,5 +96,13 @@ func (a *app) stop() {
 }
 
 func onPingTimerTick() {
-	log.Printf("Ping timer.")
+	workers := a.wr.list_workers()
+	now := time.Now()
+	for _, worker := range workers {
+		if now.Sub(worker.lastPingTime).Abs() > 10*time.Second {
+			log.Printf("Worker %s didnt notify its status in the last 10 seconds, disconnecting...", worker.name)
+			a.wr.delete(worker.name)
+			a.calculator.forget_jobs_of(worker.name)
+		}
+	}
 }

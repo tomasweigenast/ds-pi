@@ -16,8 +16,9 @@ type Calculator struct {
 	client     *rpc.Client
 	workerName string
 
-	job       *currentJob
-	pingTimer *shared.Timer
+	job        *currentJob
+	pingTimer  *shared.Timer
+	connecting bool
 }
 
 type currentJob struct {
@@ -73,12 +74,21 @@ func (c *Calculator) run() {
 		time.Sleep(5 * time.Second)
 	}
 
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("Recovered")
+			c.reconnect()
+		}
+	}()
+
 	// ask jobs
 	for {
 		if c.askJob() {
 			if result := c.calculate(); result != nil {
 				c.send(result)
 			}
+		} else {
+			c.reconnect()
 		}
 	}
 }
@@ -118,11 +128,21 @@ func (c *Calculator) connect() bool {
 }
 
 func (c *Calculator) reconnect() {
+	if c.connecting {
+		return
+	}
+
+	log.Printf("Trying to reconnect")
+	c.connecting = true
+
 	if c.client != nil {
 		c.client.Close()
 		c.client = nil
+		c.workerName = ""
+		c.job = nil
 	}
 	time.Sleep(10 * time.Second)
+	c.connecting = false
 	c.run()
 }
 
@@ -135,11 +155,15 @@ func (c *Calculator) tryAgain() {
 func (c *Calculator) askJob() bool {
 	log.Printf("Asking for job...")
 
+	if c.client == nil {
+		return false
+	}
+
 	args := &shared.AskArgs{WorkerName: c.workerName}
 	var reply shared.AskReply
 	err := c.client.Call("JobsService.Ask", args, &reply)
 	if err != nil {
-		log.Fatalf("unable to ask for a job: %s", err)
+		log.Printf("unable to ask for a job: %s", err)
 		return false
 	}
 
@@ -181,7 +205,7 @@ func (c *Calculator) calculate() []byte {
 
 	buffer, err := result.GobEncode()
 	if err != nil {
-		log.Fatalf("unable to encode result as gob: %s", err)
+		log.Printf("unable to encode result as gob: %s", err)
 		return nil
 	}
 
@@ -201,7 +225,7 @@ func (c *Calculator) send(buffer []byte) bool {
 	var reply shared.GiveReply
 	err := c.client.Call("JobsService.Give", args, &reply)
 	if err != nil {
-		log.Fatalf("unable to call CalcRPC.Give: %s", err)
+		log.Printf("unable to call JobsService.Give: %s", err)
 		return false
 	}
 

@@ -27,6 +27,7 @@ type calculator struct {
 	LastTerm  uint64
 	LastJobID uint64
 	PI        *big.Float
+	tempPI    *big.Float
 
 	mergeTimer *shared.Timer
 	stopped    bool
@@ -55,6 +56,7 @@ func new_calculator() *calculator {
 		buffer:  make(map[uint64]mergeRequest),
 		Jobs:    make(map[uint64]*WorkerJob),
 		PI:      big.NewFloat(0).SetPrec(50_000),
+		tempPI:  big.NewFloat(0).SetPrec(50_000),
 		stopped: false,
 	}
 
@@ -63,6 +65,20 @@ func new_calculator() *calculator {
 	})
 
 	return c
+}
+
+func (c *calculator) forget_jobs_of(workerName string) {
+	c.jobMutex.Lock()
+	defer c.jobMutex.Unlock()
+
+	for _, job := range c.Jobs {
+		if !job.Completed && job.WorkerName == workerName {
+			job.Lost = true
+			log.Printf("Job %d of %s marked as lost.", job.ID, workerName)
+		}
+	}
+
+	c.save()
 }
 
 func (c *calculator) get_job(workerName string) WorkerJob {
@@ -120,6 +136,10 @@ func (c *calculator) complete_job(jobId uint64, result []byte, precision uint) {
 		precision: precision,
 	}
 	log.Printf("Job %d added to merge buffer. Total jobs to merge: %d", jobId, len(c.buffer))
+
+	if len(c.buffer) > 5 {
+		go c.merge()
+	}
 }
 
 func (c *calculator) save() {
@@ -173,7 +193,6 @@ func (c *calculator) delete_state_file() {
 }
 
 func (c *calculator) merge() {
-
 	if len(c.buffer) == 0 {
 		return
 	}
@@ -182,11 +201,12 @@ func (c *calculator) merge() {
 		log.Printf("Ignoring this merge request because there is another one in process.")
 		return
 	}
+
 	defer c.sumMutex.Unlock()
 
-	// held bufferMutex to copy buffer to a temp location first
+	// Hold bufferMutex to copy buffer to a temp location first
 	c.bufferMutex.RLock()
-	buffer := make([]mergeRequest, 0, len(c.buffer))
+	buffer := make([]mergeRequest, len(c.buffer))
 	for _, req := range c.buffer {
 		buffer = append(buffer, mergeRequest{
 			jobId:     req.jobId,
@@ -196,82 +216,70 @@ func (c *calculator) merge() {
 	}
 	c.bufferMutex.RUnlock()
 
-	// toRemove := make(map[int]uint64)
+	start := time.Now()
+
+	// reset tempPI to the current value of PI
+	c.tempPI.Copy(c.PI)
+
+	// Accumulate terms
+	batchSum := new(big.Float).SetPrec(c.tempPI.Prec())
 	for _, mergeReq := range buffer {
-		job, ok := c.Jobs[mergeReq.jobId]
-		if !ok {
-			log.Printf("Job with id [%d] not found.", mergeReq.jobId)
-			return
-		}
-
-		log.Printf("Trying to merge job %d", job.ID)
-
 		termPi := big.NewFloat(0).SetPrec(mergeReq.precision)
-		if err := termPi.GobDecode(job.Result); err != nil {
-			log.Printf("invalid big.Float bytes, ignoring result.")
-			return
-		}
-		// job.ResultString = termPi.Text('f', -1)
-
-		tempPI := new(big.Float).SetPrec(c.PI.Prec())
-		tempPI.Copy(c.PI)
-
-		now := time.Now()
-		job.Completed = true
-		job.ReturnedAt = &now
-		job.Result = mergeReq.result
-
-		for {
-			tempPI.Add(tempPI, termPi)
-			accuracy := tempPI.Acc()
-			decimalCount := len(tempPI.Text('f', -1)[2:])
-
-			log.Printf("Total decimal count: %d. Accuracy: %s", decimalCount, accuracy)
-
-			if accuracy == big.Exact {
-				c.PI.Copy(tempPI)
-				break
-			}
-
-			currentPrecision := tempPI.Prec()
-			newPrecision := currentPrecision * 5
-			tempPI.SetPrec(newPrecision)
-			log.Printf("Increased temporary PI precision to %d bits to meet accuracy requirements. Reached max: %t", newPrecision, newPrecision > big.MaxPrec)
-
-			c.PI.Copy(tempPI)
+		if err := termPi.GobDecode(mergeReq.result); err != nil {
+			log.Printf("Invalid big.Float bytes, ignoring result")
+			c.jobMutex.Lock()
+			c.Jobs[mergeReq.jobId].Lost = true
+			c.jobMutex.Unlock()
+			continue
 		}
 
-		log.Printf("Total jobs now: %d. Buffer: %d", len(c.Jobs), len(c.buffer))
-		c.bufferMutex.Lock()
-		c.jobMutex.Lock()
-		delete(c.buffer, job.ID)
-		delete(c.Jobs, job.ID)
-		c.save()
-		log.Printf("Job %d merged. Total jobs now: %d. Buffer now is: %d", job.ID, len(c.Jobs), len(c.buffer))
-		for _, e := range c.buffer {
-			log.Printf("\tJobID=%d", e.jobId)
-		}
-		c.bufferMutex.Unlock()
-		c.jobMutex.Unlock()
+		batchSum.Add(batchSum, termPi)
 	}
-	// log.Printf("Merged %d jobs", len(toRemove))
 
-	// // lock buffer for write to delete merged job
-	// c.bufferMutex.Lock()
-	// c.jobMutex.Lock()
-	// defer c.jobMutex.Unlock()
-	// defer c.bufferMutex.Unlock()
+	// Sum total
+	for {
+		c.tempPI.Add(c.tempPI, batchSum)
 
-	// newBuffer := c.buffer[:0]
-	// for i, value := range buffer {
-	// 	if jobID, found := toRemove[i]; !found {
-	// 		newBuffer = append(newBuffer, value)
-	// 		delete(c.Jobs, jobID)
-	// 		log.Printf("Job %d deleted.", jobID)
-	// 	}
-	// }
-	// c.buffer = newBuffer
-	// go c.save()
+		// Check accuracy and decimal count
+		accuracy := c.tempPI.Acc()
+		log.Printf("Accuracy: %s", accuracy)
+
+		if accuracy == big.Exact {
+			break
+		}
+
+		// Increase precision to improve accuracy
+		currentPrecision := c.tempPI.Prec()
+		newPrecision := currentPrecision * 2
+		if newPrecision > big.MaxPrec {
+			log.Fatalf("Reached maximum precision limit of big.Float. Theorical limit.")
+			break
+		}
+
+		c.tempPI.SetPrec(newPrecision)
+		batchSum.SetPrec(newPrecision) // Ensure batchSum matches the new precision
+		log.Printf("Increased tempPI precision to %d bits. Doing addition again.", newPrecision)
+	}
+
+	// Copy result
+	log.Printf("Copying temp into PI...")
+	c.PI.Copy(c.tempPI)
+	log.Printf("Copied!")
+	log.Printf("Merged %d jobs in %s.", len(buffer), time.Since(start))
+
+	c.bufferMutex.Lock()
+	defer c.bufferMutex.Unlock()
+
+	now := time.Now()
+	for _, mergeReq := range buffer {
+		if job, ok := c.Jobs[mergeReq.jobId]; ok {
+			job.Completed = true
+			job.ReturnedAt = &now
+			delete(c.buffer, job.ID)
+		}
+	}
+
+	c.save()
 }
 
 func (c *calculator) stop() {
