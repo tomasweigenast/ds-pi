@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/rpc"
 	"sync"
+	"time"
 
 	"ds-pi.com/master/shared"
 )
@@ -20,9 +21,9 @@ type Worker struct {
 	remoteConn net.IP
 	name       string
 
-	PingClient       *rpc.Client
-	Available        bool
-	UnavailableCount uint // the number of pings that passed and it was reported as unavailable
+	PingClient   *rpc.Client
+	Available    bool
+	LastPingTime time.Time
 }
 
 func (w *Worker) IP() net.IP {
@@ -46,9 +47,10 @@ func (w *WorkerRegistry) GetWorker(ip string) string {
 
 	name := fmt.Sprintf("worker-%s", shared.RandomString())
 	w.workers[name] = Worker{
-		name:       name,
-		remoteConn: net.ParseIP(ip),
-		Available:  true,
+		name:         name,
+		remoteConn:   net.ParseIP(ip),
+		Available:    true,
+		LastPingTime: time.Now(),
 	}
 	log.Printf("Worker %q added at %s", name, ip)
 
@@ -61,6 +63,20 @@ func (w *WorkerRegistry) Delete(name string) {
 
 	delete(w.workers, name)
 	log.Printf("Worker %q deleted", name)
+}
+
+func (w *WorkerRegistry) NotifyPing(workerName string) bool {
+	w.mutex.Lock()
+	defer w.mutex.Unlock()
+
+	worker, ok := w.workers[workerName]
+	if !ok {
+		return false
+	}
+
+	worker.LastPingTime = time.Now()
+	w.workers[workerName] = worker
+	return true
 }
 
 func (w *WorkerRegistry) ListWorkers() []*Worker {

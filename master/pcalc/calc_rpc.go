@@ -15,7 +15,7 @@ type CalcRPC struct {
 // Ask gives a range of terms to calculate to a worker.
 func (s *CalcRPC) Ask(args *shared.AskArgs, reply *shared.AskReply) error {
 	log.Printf("Job ask received from worker %q", args.WorkerName)
-	job := s.calc.GetNewJob(args.WorkerName)
+	job := s.calc.GetJob(args.WorkerName)
 	reply.StartTerm = job.FirstTerm
 	reply.NumTerms = job.NumTerms
 	reply.JobID = job.ID
@@ -32,5 +32,12 @@ func (s *CalcRPC) Connect(args *shared.ConnectArgs, reply *shared.ConnectReply) 
 	log.Printf("Connect request from worker")
 	workerName := s.reg.GetWorker(args.WorkerIP)
 	reply.WorkerName = workerName
+	return nil
+}
+
+func (s *CalcRPC) Ping(args *shared.PingArgs, reply *shared.PingResponse) error {
+	if s.reg.NotifyPing(args.WorkerName) {
+		log.Printf("Ping %s", args.WorkerName)
+	}
 	return nil
 }
