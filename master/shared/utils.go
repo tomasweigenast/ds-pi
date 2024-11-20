@@ -1,16 +1,12 @@
 package shared
 
 import (
+	"crypto/rand"
 	"fmt"
 	"net"
-	"time"
-
-	"golang.org/x/exp/rand"
 )
 
-const PING_PORT = 8989
-const PCALC_PORT = 9999
-const DISCOVER_PORT = 9933
+const MASTER_PORT = 9999
 
 func GetIPv4() (net.IP, error) {
 	interfaces, err := net.Interfaces()
@@ -46,14 +42,15 @@ func GetIPv4() (net.IP, error) {
 	return nil, fmt.Errorf("no non-loopback IPv4 address found")
 }
 
-const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+var chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890"
 
-// RandomString generates a random string of the specified length
+// RandomString generates a random string
 func RandomString() string {
-	seededRand := rand.New(rand.NewSource(uint64(time.Now().UnixNano())))
-	b := make([]byte, 10)
-	for i := range b {
-		b[i] = charset[seededRand.Intn(len(charset))]
+	ll := len(chars)
+	b := make([]byte, 8)
+	rand.Read(b)
+	for i := 0; i < 8; i++ {
+		b[i] = chars[int(b[i])%ll]
 	}
 	return string(b)
 }

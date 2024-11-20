@@ -21,5 +21,5 @@ func Load() {
 		TermSize = uint64(termSize)
 	}
 
-	log.Printf("Config loaded. TermSize [%d] Reset [%t]", TermSize, Reset)
+	log.Printf("Using config: TermSize [%d] Reset [%t]", TermSize, Reset)
 }

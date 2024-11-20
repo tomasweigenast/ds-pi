@@ -27,7 +27,7 @@ func main() {
 	log.Printf("Using IP: %s", ip.String())
 	log.Printf("Master IP: %s", masterIP)
 
-	calculator := calculator.NewCalculator(net.ParseIP(masterIP), shared.PCALC_PORT)
+	calculator := calculator.NewCalculator(net.ParseIP(masterIP), shared.MASTER_PORT)
 	calculator.Run()
 
 	defer func() {

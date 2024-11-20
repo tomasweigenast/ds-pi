@@ -16,9 +16,8 @@ type Calculator struct {
 	client     *rpc.Client
 	workerName string
 
-	job    *currentJob
-	ticker *time.Ticker
-	stopCh chan struct{}
+	job       *currentJob
+	pingTimer *shared.Timer
 }
 
 type currentJob struct {
@@ -30,26 +29,49 @@ type currentJob struct {
 	precision uint
 }
 
-func NewCalculator(masterIP net.IP, port int) Calculator {
-	return Calculator{
+func NewCalculator(masterIP net.IP, port int) *Calculator {
+	c := &Calculator{
 		masterAddr: net.TCPAddr{
 			IP:   masterIP,
 			Port: port,
 		},
-		ticker: time.NewTicker(time.Second * 5),
 	}
+
+	c.pingTimer = shared.NewTimer(time.Second*5, func() {
+		onPingTimerTick(c)
+	})
+
+	return c
 }
 
 func (c *Calculator) Run() {
-	c.createClient()
+	c.run()
+}
 
-	// connect
-	if err := c.connect(); err != nil {
-		log.Fatalf("unable to connect to master: %s", err)
+func (c *Calculator) Stop() {
+	if c.client != nil {
+		c.client.Close()
+		c.client = nil
 	}
+}
 
-	// start pinging
-	c.ping()
+func (c *Calculator) run() {
+	tryCount := 0
+	for {
+		log.Printf("Trying to connect. Count = %d", tryCount)
+		if c.connect() {
+			break
+		}
+
+		if tryCount > 20 {
+			log.Fatalf("Giving up after 20 tries.")
+			return
+		}
+
+		log.Printf("Unable to connect to master. Trying again in 5 seconds...")
+		tryCount++
+		time.Sleep(5 * time.Second)
+	}
 
 	// ask jobs
 	for {
@@ -61,63 +83,53 @@ func (c *Calculator) Run() {
 	}
 }
 
-func (c *Calculator) Stop() {
+func (c *Calculator) connect() bool {
 	if c.client != nil {
 		c.client.Close()
 		c.client = nil
 	}
-}
 
-func (c *Calculator) createClient() {
 	client, err := rpc.DialHTTP("tcp", c.masterAddr.String())
 	if err != nil {
-		log.Fatalf("failed to dial tcp to master: %s", err)
-		return
+		log.Printf("failed to dial tcp to master: %s", err)
+		return false
 	}
 
 	c.client = client
-}
 
-func (c *Calculator) ping() {
-	go func() {
-		for {
-			select {
-			case <-c.ticker.C:
-				if c.client != nil {
-					args := &shared.PingArgs{
-						WorkerName: c.workerName,
-					}
-					reply := shared.PingResponse{}
-					if err := c.client.Call("CalcRPC.Ping", args, &reply); err != nil {
-						log.Printf("Unable to ping master: %s", err)
-					}
-				}
-
-			case <-c.stopCh:
-				c.ticker.Stop()
-				return
-			}
-		}
-	}()
-}
-
-func (c *Calculator) connect() error {
 	myIP, err := shared.GetIPv4()
 	if err != nil {
-		return err
+		log.Printf("Unable to get my ip: %s", err)
+		return false
 	}
 
 	args := &shared.ConnectArgs{WorkerIP: myIP.String()}
 	var reply shared.ConnectReply
-	err = c.client.Call("CalcRPC.Connect", args, &reply)
+	err = c.client.Call("ConnectService.Connect", args, &reply)
 	if err != nil {
-		return err
+		log.Printf("Unable to call Connect rpc method: %s", err)
+		c.tryAgain()
 	}
 
 	c.workerName = reply.WorkerName
 	log.Printf("My name is: %s", c.workerName)
 
-	return nil
+	return true
+}
+
+func (c *Calculator) reconnect() {
+	if c.client != nil {
+		c.client.Close()
+		c.client = nil
+	}
+	time.Sleep(10 * time.Second)
+	c.run()
+}
+
+func (c *Calculator) tryAgain() {
+	log.Printf("Trying to reconnect in 5 seconds...")
+	time.Sleep(5 * time.Second)
+	c.run()
 }
 
 func (c *Calculator) askJob() bool {
@@ -125,7 +137,7 @@ func (c *Calculator) askJob() bool {
 
 	args := &shared.AskArgs{WorkerName: c.workerName}
 	var reply shared.AskReply
-	err := c.client.Call("CalcRPC.Ask", args, &reply)
+	err := c.client.Call("JobsService.Ask", args, &reply)
 	if err != nil {
 		log.Fatalf("unable to ask for a job: %s", err)
 		return false
@@ -177,13 +189,17 @@ func (c *Calculator) calculate() []byte {
 }
 
 func (c *Calculator) send(buffer []byte) bool {
+	if c.client == nil {
+		return false
+	}
+
 	args := &shared.GiveArgs{
 		JobID:     c.job.id,
 		Result:    buffer,
 		Precision: c.job.precision,
 	}
 	var reply shared.GiveReply
-	err := c.client.Call("CalcRPC.Give", args, &reply)
+	err := c.client.Call("JobsService.Give", args, &reply)
 	if err != nil {
 		log.Fatalf("unable to call CalcRPC.Give: %s", err)
 		return false
@@ -215,4 +231,17 @@ func calculateTerm(k uint64, precision uint) *big.Float {
 	term.Mul(term, multiplier)
 
 	return term
+}
+
+func onPingTimerTick(c *Calculator) {
+	if c.client != nil {
+		args := &shared.PingArgs{WorkerName: c.workerName}
+		var reply shared.PingReply
+		err := c.client.Call("PingService.Ping", args, &reply)
+		if err != nil {
+			log.Printf("Unable to ping master: %s", err)
+			log.Println("Disconnecting and trying again in 10 seconds...")
+			c.reconnect()
+		}
+	}
 }
