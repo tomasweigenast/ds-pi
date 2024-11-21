@@ -29,6 +29,7 @@ func main() {
 
 	calculator := calculator.NewCalculator(net.ParseIP(masterIP), shared.MASTER_PORT)
 	calculator.Run()
+	// TODO: make sure precision is not lost on this calculations
 
 	defer func() {
 		calculator.Stop()

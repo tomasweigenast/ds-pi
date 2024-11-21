@@ -3,10 +3,13 @@ package app
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"log"
 	"math/big"
 	"os"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -184,7 +187,9 @@ func (c *calculator) restore() {
 		}
 	}
 
-	go c.save()
+	log.Printf("PI number: %s", c.PI.Text('f', -1))
+
+	c.save()
 }
 
 func (c *calculator) delete_state_file() {
@@ -206,7 +211,7 @@ func (c *calculator) merge() {
 
 	// Hold bufferMutex to copy buffer to a temp location first
 	c.bufferMutex.RLock()
-	buffer := make([]mergeRequest, len(c.buffer))
+	buffer := make([]mergeRequest, 0, len(c.buffer))
 	for _, req := range c.buffer {
 		buffer = append(buffer, mergeRequest{
 			jobId:     req.jobId,
@@ -216,6 +221,15 @@ func (c *calculator) merge() {
 	}
 	c.bufferMutex.RUnlock()
 
+	slices.SortFunc(buffer, func(a, b mergeRequest) int {
+		if a.jobId > b.jobId {
+			return 1
+		}
+
+		return -1
+	})
+
+	log.Printf("Going to merge %d jobs (%s)", len(buffer), strings.Join(shared.MapArray(buffer, func(mr mergeRequest) string { return fmt.Sprint(mr.jobId) }), ", "))
 	start := time.Now()
 
 	// reset tempPI to the current value of PI
@@ -268,8 +282,13 @@ func (c *calculator) merge() {
 	log.Printf("Merged %d jobs in %s.", len(buffer), time.Since(start))
 
 	c.bufferMutex.Lock()
-	defer c.bufferMutex.Unlock()
+	c.jobMutex.Lock()
+	defer func() {
+		c.jobMutex.Unlock()
+		c.bufferMutex.Unlock()
+	}()
 
+	log.Printf("Total jobs in buffer before delete: %d", len(c.buffer))
 	now := time.Now()
 	for _, mergeReq := range buffer {
 		if job, ok := c.Jobs[mergeReq.jobId]; ok {
@@ -278,6 +297,7 @@ func (c *calculator) merge() {
 			delete(c.buffer, job.ID)
 		}
 	}
+	log.Printf("Total jobs in buffer now: %d", len(c.buffer))
 
 	c.save()
 }

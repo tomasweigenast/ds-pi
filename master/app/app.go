@@ -20,6 +20,7 @@ type app struct {
 	calculator *calculator
 
 	pingTimer *shared.Timer
+	memTimer  *shared.Timer
 }
 
 var a app
@@ -41,8 +42,10 @@ func Run() {
 		calculator: new_calculator(),
 
 		pingTimer: shared.NewTimer(10*time.Second, onPingTimerTick),
+		memTimer:  shared.NewTimer(1*time.Minute, printMemoryUsage),
 	}
 	a.run()
+	printMemoryUsage()
 }
 
 func Stop() {
@@ -66,6 +69,10 @@ func Commands() {
 
 			decimalCount := len(pi[2:])
 			log.Printf("PI (decimals = %d): %s", decimalCount, pi)
+			break
+
+		case "mem":
+			printMemoryUsage()
 			break
 
 		case "exit":
@@ -105,4 +112,13 @@ func onPingTimerTick() {
 			a.calculator.forget_jobs_of(worker.name)
 		}
 	}
+}
+
+func printMemoryUsage() {
+	shared.PrintMemUsage(map[string]any{
+		"pi":          a.calculator.PI,
+		"temp_pi":     a.calculator.tempPI,
+		"jobs":        &a.calculator.Jobs,
+		"merge_queue": &a.calculator.buffer,
+	})
 }
