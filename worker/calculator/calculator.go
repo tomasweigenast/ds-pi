@@ -179,7 +179,7 @@ func (c *Calculator) askJob() bool {
 
 		nota: la precision no puede ser mayor que un uint32 (tecnicamente limitado por la memoria del sistema)
 	*/
-	precision := uint(math.Log2(float64(reply.NumTerms))+1000*3.32) * 3
+	precision := uint(math.Log2(float64(reply.NumTerms))+10000*3.32) * 3
 	c.job = &currentJob{
 		id:        reply.JobID,
 		startTerm: reply.StartTerm,
@@ -198,6 +198,10 @@ func (c *Calculator) calculate() []byte {
 	for k := c.job.startTerm; k < until; k++ {
 		term := calculateTerm(k, c.job.precision)
 		result.Add(result, term)
+
+		if result.Acc() != big.Exact {
+			log.Printf("Accuracy is not exact. It is %s", result.Acc())
+		}
 	}
 
 	elapsed := time.Now().Sub(start)
