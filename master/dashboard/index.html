@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Distributed System Dashboard</title>
+    <style>
+      :root {
+        --primary-color: #2563eb;
+        --background-color: #f8fafc;
+        --card-background: #ffffff;
+        --text-color: #1e293b;
+        --border-color: #e2e8f0;
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: system-ui, -apple-system, sans-serif;
+        background-color: var(--background-color);
+        color: var(--text-color);
+        line-height: 1.5;
+        padding: 1rem;
+      }
+
+      .dashboard {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 1rem;
+        max-width: 1400px;
+        margin: 0 auto;
+      }
+
+      .card {
+        background: var(--card-background);
+        border-radius: 0.5rem;
+        padding: 1.5rem;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      }
+
+      .card-title {
+        font-size: 1.25rem;
+        font-weight: 600;
+        margin-bottom: 1rem;
+        color: var(--primary-color);
+      }
+
+      .worker-list {
+        list-style: none;
+      }
+
+      .worker-item {
+        padding: 0.75rem;
+        border-bottom: 1px solid var(--border-color);
+      }
+
+      .worker-item:last-child {
+        border-bottom: none;
+      }
+
+      .stat-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1rem;
+      }
+
+      .stat-item {
+        background: var(--background-color);
+        padding: 0.75rem;
+        border-radius: 0.25rem;
+      }
+
+      .stat-label {
+        font-size: 0.875rem;
+        color: #64748b;
+      }
+
+      .stat-value {
+        font-size: 1.25rem;
+        font-weight: 600;
+        margin-top: 0.25rem;
+      }
+
+      .pi-value {
+        font-size: 2rem;
+        font-weight: 600;
+        text-align: center;
+        padding: 2rem 0;
+        font-family: monospace;
+        word-wrap: break-word; /* Break long words if necessary */
+        overflow-wrap: anywhere; /* Allow breaks at any point if the word is too long */
+        word-break: break-all; /* Break within long words */
+      }
+
+      .pi-decimals {
+        font-size: 1rem;
+        text-align: center;
+        color: #64748b;
+      }
+
+      .status-indicator {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        margin-right: 0.5rem;
+      }
+
+      .status-active {
+        background-color: #22c55e;
+      }
+
+      .status-inactive {
+        background-color: #ef4444;
+      }
+
+      .variables-list {
+        margin-top: 1rem;
+        border-top: 1px solid var(--border-color);
+        padding-top: 1rem;
+      }
+
+      .variable-item {
+        display: flex;
+        justify-content: space-between;
+        padding: 0.5rem 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="dashboard">
+      <div class="card">
+        <h2 class="card-title">Workers Status</h2>
+        <ul class="worker-list" id="workerList">
+          <!-- Worker items will be inserted here -->
+        </ul>
+      </div>
+
+      <div class="card">
+        <h2 class="card-title">Current PI Calculation</h2>
+        <div class="pi-value" id="piValue">0.0</div>
+        <div class="pi-decimals" id="piDecimals">Decimals: 0</div>
+      </div>
+
+      <div class="card">
+        <h2 class="card-title">Memory Stats</h2>
+        <div class="stat-grid">
+          <div class="stat-item">
+            <div class="stat-label">Allocated Memory</div>
+            <div class="stat-value" id="allocatedMemory">0 B</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">Total Allocated</div>
+            <div class="stat-value" id="totalAlloc">0 B</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">Freed Memory</div>
+            <div class="stat-value" id="freedMemory">0 B</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">System Memory</div>
+            <div class="stat-value" id="sysMem">0 B</div>
+          </div>
+        </div>
+        <div class="variables-list">
+          <h3 class="card-title">Variable Memory Usage</h3>
+          <div id="variablesList">
+            <!-- Variable memory items will be inserted here -->
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">Total Variable Allocation</div>
+            <div class="stat-value" id="totalVariableAlloc">0 B</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const ws = new WebSocket("ws://localhost:8080/ws");
+
+      // DOM elements
+      const workerList = document.getElementById("workerList");
+      const piValue = document.getElementById("piValue");
+      const piDecimals = document.getElementById("piDecimals");
+      const allocatedMemory = document.getElementById("allocatedMemory");
+      const totalAlloc = document.getElementById("totalAlloc");
+      const freedMemory = document.getElementById("freedMemory");
+      const sysMem = document.getElementById("sysMem");
+      const variablesList = document.getElementById("variablesList");
+      const totalVariableAlloc = document.getElementById("totalVariableAlloc");
+
+      function formatBytes(bytes) {
+        if (bytes === 0) return "0 B";
+        const k = 1024;
+        const sizes = ["B", "KB", "MB", "GB", "TB"];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+      }
+
+      function formatSeconds(seconds) {
+        if (seconds < 60) {
+          return `${Math.floor(seconds)}s`;
+        } else if (seconds < 3600) {
+          return `${Math.floor(seconds / 60)}m ${Math.floor(seconds % 60)}s`;
+        } else {
+          const hours = Math.floor(seconds / 3600);
+          const minutes = Math.floor((seconds % 3600) / 60);
+          return `${hours}h ${minutes}m`;
+        }
+      }
+
+      function updateWorkers(workers) {
+        const now = Date.now();
+        workerList.innerHTML = workers
+          .map((worker) => {
+            const secondsSinceLastPing =
+              (now - new Date(worker.lastPing)) / 1000;
+            return `
+              <li class="worker-item">
+                <span class="status-indicator ${
+                  worker.active ? "status-active" : "status-inactive"
+                }"></span>
+                <strong>${worker.id}</strong><br>
+                Last ping: ${formatSeconds(secondsSinceLastPing)} ago<br>
+                Last job: ${worker.lastJob || "None"}
+              </li>
+            `;
+          })
+          .join("");
+      }
+
+      function updateVariables(variables, total) {
+        variables.sort((a, b) => a.varName.localeCompare(b.varName));
+        variablesList.innerHTML = variables
+          .map(
+            (variable) => `
+              <div class="variable-item">
+                <span>${variable.varName}</span>
+                <span>${formatBytes(variable.alloc)}</span>
+              </div>
+            `
+          )
+          .join("");
+        totalVariableAlloc.textContent = formatBytes(total);
+      }
+
+      // WebSocket event handlers
+      ws.onopen = () => {
+        console.log("Connected to server");
+      };
+
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+
+        if (data.pi) {
+          piValue.textContent = `${data.pi.pi.substring(0, 60)} ...`;
+          piDecimals.textContent = `Decimals: ${data.pi.pi_decimals}`;
+        }
+
+        if (data.server) {
+          if (data.server.workers) {
+            updateWorkers(data.server.workers);
+          }
+
+          if (data.server.memory) {
+            const memory = data.server.memory;
+            allocatedMemory.textContent = formatBytes(memory.allocated);
+            totalAlloc.textContent = formatBytes(memory.totalAlloc);
+            freedMemory.textContent = formatBytes(memory.freed);
+            sysMem.textContent = formatBytes(memory.sysMem);
+            updateVariables(memory.variables, memory.totalVariableAlloc);
+          }
+        }
+      };
+
+      ws.onclose = () => {
+        console.log("Disconnected from server");
+        // Attempt to reconnect after 5 seconds
+        setTimeout(() => {
+          window.location.reload();
+        }, 5000);
+      };
+
+      ws.onerror = (error) => {
+        console.error("WebSocket error:", error);
+      };
+
+      // Update worker times every second
+      setInterval(() => {
+        const workers = document.querySelectorAll(".worker-item");
+        if (workers.length > 0) {
+          updateWorkers(JSON.parse(ws.workers));
+        }
+      }, 1000);
+    </script>
+  </body>
+</html>

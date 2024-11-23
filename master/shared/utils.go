@@ -6,6 +6,8 @@ import (
 	"net"
 	"runtime"
 	"strings"
+
+	"ds-pi.com/master/stats"
 )
 
 const MASTER_PORT = 9999
@@ -86,6 +88,31 @@ func PrintMemUsage(variables map[string]any) {
 	buf.WriteString("------------------------------------------------------------------------------------\n")
 
 	fmt.Print(buf.String())
+}
+
+func GetMemStats(variables map[string]any) stats.MemStats {
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+
+	var varMem []stats.VariableMem
+	var totalVariableAlloc uint64
+	if len(variables) > 0 {
+		for name, variable := range variables {
+			size := SizeOf(variable)
+			if size > 0 {
+				totalVariableAlloc += uint64(size)
+				varMem = append(varMem, stats.VariableMem{VariableName: name, Alloc: uint64(size)})
+			}
+		}
+	}
+	return stats.MemStats{
+		Allocated:          m.Alloc,
+		TotalAlloc:         m.TotalAlloc,
+		Freed:              m.TotalAlloc - m.Alloc,
+		SysMem:             m.Sys,
+		Variables:          varMem,
+		TotalVariableAlloc: totalVariableAlloc,
+	}
 }
 
 func formatBytes(bytes uint64) string {

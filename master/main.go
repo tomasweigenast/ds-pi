@@ -6,6 +6,7 @@ import (
 
 	app "ds-pi.com/master/app"
 	"ds-pi.com/master/config"
+	"ds-pi.com/master/dashboard"
 )
 
 func main() {
@@ -14,6 +15,7 @@ func main() {
 
 	go app.Run()
 	go app.Commands()
+	go dashboard.Start()
 
 	defer app.Stop()
 

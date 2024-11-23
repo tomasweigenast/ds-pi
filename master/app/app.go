@@ -11,6 +11,7 @@ import (
 
 	"ds-pi.com/master/config"
 	"ds-pi.com/master/shared"
+	"ds-pi.com/master/stats"
 )
 
 type app struct {
@@ -83,6 +84,44 @@ func Commands() {
 
 	if err := scanner.Err(); err != nil {
 		fmt.Fprintln(os.Stderr, "error reading input:", err)
+	}
+}
+
+func Stats() stats.ServerStats {
+	return a.stats()
+}
+
+func PIStats() stats.PIStats {
+	return a.pi_stats()
+}
+
+func (a *app) pi_stats() stats.PIStats {
+	pi := a.calculator.PI.Text('f', -1)
+	return stats.PIStats{
+		PI:           pi,
+		DecimalCount: len(pi[2:]),
+	}
+}
+
+func (a *app) stats() stats.ServerStats {
+	memStats := shared.GetMemStats(map[string]any{
+		"pi":          a.calculator.PI,
+		"temp_pi":     a.calculator.tempPI,
+		"jobs":        &a.calculator.Jobs,
+		"merge_queue": &a.calculator.buffer,
+	})
+	workers := make([]stats.Worker, 0, len(a.wr.workers))
+	for name, worker := range a.wr.workers {
+		workers = append(workers, stats.Worker{
+			ID:       name,
+			Active:   worker.available,
+			LastPing: worker.lastPingTime,
+			LastJob:  "",
+		})
+	}
+	return stats.ServerStats{
+		Memory:  memStats,
+		Workers: workers,
 	}
 }
 
