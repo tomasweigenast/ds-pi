@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+	"io"
 	"log"
 	"math"
 
@@ -13,9 +15,14 @@ func main() {
 	log.Printf("Max uint allowed by the arch: %d", uint(math.MaxUint))
 	config.Load()
 
-	go app.Run()
-	go app.Commands()
-	go dashboard.Start()
+	if !config.Logs {
+		log.SetOutput(io.Discard)
+		log.SetFlags(0)
+	}
+
+	dashboard.Start()
+	app.Run()
+	fmt.Println("Running")
 
 	defer app.Stop()
 

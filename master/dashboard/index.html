@@ -286,8 +286,6 @@
     </div>
 
     <script>
-      const ws = new WebSocket("ws://localhost:8080/ws");
-
       // DOM elements
       const workerList = document.getElementById("workerList");
       const piValue = document.getElementById("piValue");
@@ -415,11 +413,13 @@
       }
 
       // WebSocket event handlers
+      const ws = new WebSocket("ws://localhost:80/ws");
       ws.onopen = () => {
         console.log("Connected to server");
       };
 
       ws.onmessage = (event) => {
+        console.log("Received event", event.data);
         const data = JSON.parse(event.data);
         stats = data.server;
 
