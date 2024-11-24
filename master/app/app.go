@@ -45,6 +45,7 @@ func Run() {
 		pingTimer: shared.NewTimer(10*time.Second, onPingTimerTick),
 		memTimer:  shared.NewTimer(1*time.Minute, printMemoryUsage),
 	}
+	a.wr.onConnect = a.calculator.onConnect
 	a.run()
 	printMemoryUsage()
 }
@@ -97,6 +98,13 @@ func PIStats() stats.PIStats {
 
 func (a *app) pi_stats() stats.PIStats {
 	pi := a.calculator.PI.Text('f', -1)
+	if len(pi) < 2 {
+		return stats.PIStats{
+			PI:           pi,
+			DecimalCount: 0,
+		}
+	}
+
 	return stats.PIStats{
 		PI:           pi,
 		DecimalCount: len(pi[2:]),
@@ -111,17 +119,30 @@ func (a *app) stats() stats.ServerStats {
 		"merge_queue": &a.calculator.buffer,
 	})
 	workers := make([]stats.Worker, 0, len(a.wr.workers))
+	jobs := make([]stats.Job, 0, len(a.calculator.Jobs))
 	for name, worker := range a.wr.workers {
 		workers = append(workers, stats.Worker{
 			ID:       name,
 			Active:   worker.available,
 			LastPing: worker.lastPingTime,
-			LastJob:  "",
+			IP:       worker.ip.String(),
+		})
+	}
+	for _, job := range a.calculator.Jobs {
+		jobs = append(jobs, stats.Job{
+			ID:         job.ID,
+			WorkerID:   job.WorkerName,
+			Completed:  job.Completed,
+			SentAt:     job.SendAt,
+			ReceivedAt: job.ReturnedAt,
+			StartTerm:  job.FirstTerm,
 		})
 	}
 	return stats.ServerStats{
-		Memory:  memStats,
-		Workers: workers,
+		TermSize: config.TermSize,
+		Memory:   memStats,
+		Workers:  workers,
+		Jobs:     jobs,
 	}
 }
 
@@ -146,8 +167,8 @@ func onPingTimerTick() {
 	now := time.Now()
 	for _, worker := range workers {
 		if now.Sub(worker.lastPingTime).Abs() > 10*time.Second {
-			log.Printf("Worker %s didnt notify its status in the last 10 seconds, disconnecting...", worker.name)
-			a.wr.delete(worker.name)
+			log.Printf("Worker %s didnt notify its status in the last 10 seconds, deactivating...", worker.name)
+			a.wr.set_inactive(worker.name)
 			a.calculator.forget_jobs_of(worker.name)
 		}
 	}

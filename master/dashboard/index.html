@@ -29,7 +29,7 @@
 
       .dashboard {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
         gap: 1rem;
         max-width: 1400px;
         margin: 0 auto;
@@ -51,6 +51,7 @@
 
       .worker-list {
         list-style: none;
+        border-top: 1px solid var(--border-color);
       }
 
       .worker-item {
@@ -86,14 +87,15 @@
       }
 
       .pi-value {
+        border-top: 1px solid var(--border-color);
         font-size: 2rem;
         font-weight: 600;
         text-align: center;
         padding: 2rem 0;
         font-family: monospace;
-        word-wrap: break-word; /* Break long words if necessary */
-        overflow-wrap: anywhere; /* Allow breaks at any point if the word is too long */
-        word-break: break-all; /* Break within long words */
+        word-wrap: break-word;
+        overflow-wrap: anywhere;
+        word-break: break-all;
       }
 
       .pi-decimals {
@@ -102,7 +104,14 @@
         color: #64748b;
       }
 
-      .status-indicator {
+      .job-status-indicator {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        margin-right: 1rem;
+      }
+
+      .worker-status-indicator {
         display: inline-block;
         width: 8px;
         height: 8px;
@@ -129,6 +138,80 @@
         justify-content: space-between;
         padding: 0.5rem 0;
       }
+
+      .job-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        border-top: 1px solid var(--border-color);
+        border-radius: 0.25rem;
+        overflow-y: auto;
+      }
+
+      .job-item {
+        display: flex;
+        align-items: center;
+        padding: 0.75rem;
+        border-bottom: 1px solid var(--border-color);
+      }
+
+      .job-item:last-child {
+        border-bottom: none;
+      }
+
+      .job-details {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .job-details div {
+        margin-bottom: 0.25rem;
+        font-size: 0.875rem;
+        color: var(--text-color);
+      }
+
+      .job-details strong {
+        color: var(--primary-color);
+      }
+
+      .jobs-done-card {
+        max-height: 450px;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .job-content {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+      }
+
+      .job-header {
+        font-size: 1rem;
+        font-weight: bold;
+        margin-bottom: 0.5rem;
+        color: var(--primary-color);
+      }
+
+      .job-info {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.875rem;
+        color: var(--text-color);
+        margin-bottom: 0.25rem;
+      }
+
+      .job-timestamps {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.75rem;
+        color: #64748b;
+      }
+
+      .job-timestamps span {
+        white-space: nowrap;
+      }
     </style>
   </head>
   <body>
@@ -144,6 +227,29 @@
         <h2 class="card-title">Current PI Calculation</h2>
         <div class="pi-value" id="piValue">0.0</div>
         <div class="pi-decimals" id="piDecimals">Decimals: 0</div>
+        <div class="pi-decimals" id="termSize">Term Size: 0</div>
+      </div>
+
+      <div class="card jobs-done-card">
+        <h2 class="card-title">Jobs</h2>
+        <ui class="job-list" id="jobList">
+          <!-- <li class="job-item">
+            <span class="job-status-indicator status-active"></span>
+            <div class="job-content">
+              <div class="job-header">
+                <strong>#12345</strong>
+              </div>
+              <div class="job-info">
+                <span>WorkerID: worker123</span>
+                <span>StartTerm: 5</span>
+              </div>
+              <div class="job-timestamps">
+                <span>Sent: 2 hours ago</span>
+                <span>Received: 1 hour ago</span>
+              </div>
+            </div>
+          </li> -->
+        </ui>
       </div>
 
       <div class="card">
@@ -186,12 +292,17 @@
       const workerList = document.getElementById("workerList");
       const piValue = document.getElementById("piValue");
       const piDecimals = document.getElementById("piDecimals");
+      const termSizeElem = document.getElementById("termSize");
       const allocatedMemory = document.getElementById("allocatedMemory");
       const totalAlloc = document.getElementById("totalAlloc");
       const freedMemory = document.getElementById("freedMemory");
       const sysMem = document.getElementById("sysMem");
       const variablesList = document.getElementById("variablesList");
       const totalVariableAlloc = document.getElementById("totalVariableAlloc");
+      const jobList = document.getElementById("jobList");
+
+      let termSize = 0;
+      let stats = {};
 
       function formatBytes(bytes) {
         if (bytes === 0) return "0 B";
@@ -213,22 +324,77 @@
         }
       }
 
-      function updateWorkers(workers) {
+      function updateWorkers() {
+        if (!stats?.workers) {
+          return;
+        }
+
         const now = Date.now();
-        workerList.innerHTML = workers
+        workerList.innerHTML = stats.workers
           .map((worker) => {
             const secondsSinceLastPing =
               (now - new Date(worker.lastPing)) / 1000;
+
             return `
               <li class="worker-item">
-                <span class="status-indicator ${
+                <span class="worker-status-indicator ${
                   worker.active ? "status-active" : "status-inactive"
                 }"></span>
                 <strong>${worker.id}</strong><br>
-                Last ping: ${formatSeconds(secondsSinceLastPing)} ago<br>
-                Last job: ${worker.lastJob || "None"}
+                <strong>IP:</strong> ${worker.ip || "None"}<br>
+                <strong>Last ping:</strong> ${formatSeconds(
+                  secondsSinceLastPing
+                )} ago<br>
               </li>
             `;
+          })
+          .join("");
+      }
+
+      function updateJobs() {
+        if (!stats?.jobs) {
+          return;
+        }
+
+        const now = Date.now();
+        // sort by completed then by id
+        stats.jobs.sort((a, b) => {
+          if (a.completed !== b.completed) {
+            return a.completed - b.completed;
+          }
+          return a.id - b.id;
+        });
+        jobList.innerHTML = stats.jobs
+          .map((job) => {
+            const secondsSinceSent = (now - new Date(job.sent_at)) / 1000;
+            let secondsSinceReceived;
+            if (job.received_at) {
+              secondsSinceReceived = (now - new Date(job.received_at)) / 1000;
+            }
+
+            return `
+          <li class="job-item">
+            <span class="job-status-indicator ${
+              job.completed ? "status-active" : "status-inactive"
+            }"></span>
+            <div class="job-content">
+              <div class="job-header">
+                <strong>#${job.id}</strong>
+              </div>
+              <div class="job-info">
+                <span>WorkerID: ${job.worker}</span>
+                <span>StartTerm: ${job.start_term}</span>
+              </div>
+              <div class="job-timestamps">
+                <span>Sent: ${formatSeconds(secondsSinceSent)}</span>
+                <span>Received: ${
+                  secondsSinceReceived
+                    ? formatSeconds(secondsSinceReceived)
+                    : "Not Available"
+                }</span>
+              </div>
+            </div>
+          </li>`;
           })
           .join("");
       }
@@ -255,6 +421,7 @@
 
       ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
+        stats = data.server;
 
         if (data.pi) {
           piValue.textContent = `${data.pi.pi.substring(0, 60)} ...`;
@@ -263,7 +430,7 @@
 
         if (data.server) {
           if (data.server.workers) {
-            updateWorkers(data.server.workers);
+            updateWorkers();
           }
 
           if (data.server.memory) {
@@ -273,6 +440,14 @@
             freedMemory.textContent = formatBytes(memory.freed);
             sysMem.textContent = formatBytes(memory.sysMem);
             updateVariables(memory.variables, memory.totalVariableAlloc);
+          }
+
+          if (data.server.termSize) {
+            termSizeElem.textContent = `Term Size: ${data.server.termSize}`;
+          }
+
+          if (data.server.jobs) {
+            updateJobs();
           }
         }
       };
@@ -291,10 +466,8 @@
 
       // Update worker times every second
       setInterval(() => {
-        const workers = document.querySelectorAll(".worker-item");
-        if (workers.length > 0) {
-          updateWorkers(JSON.parse(ws.workers));
-        }
+        updateWorkers();
+        updateJobs();
       }, 1000);
     </script>
   </body>

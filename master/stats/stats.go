@@ -9,8 +9,10 @@ type Stats struct {
 
 // ServerStats represents the system and master server statistics
 type ServerStats struct {
-	Workers []Worker `json:"workers"`
-	Memory  MemStats `json:"memory"`
+	TermSize uint64   `json:"termSize"`
+	Workers  []Worker `json:"workers"`
+	Jobs     []Job    `json:"jobs"`
+	Memory   MemStats `json:"memory"`
 }
 
 type PIStats struct {
@@ -20,9 +22,18 @@ type PIStats struct {
 
 type Worker struct {
 	ID       string    `json:"id"`
+	IP       string    `json:"ip"`
 	Active   bool      `json:"active"`
 	LastPing time.Time `json:"lastPing"`
-	LastJob  string    `json:"lastJob"`
+}
+
+type Job struct {
+	ID         uint64     `json:"id"`
+	WorkerID   string     `json:"worker"`
+	Completed  bool       `json:"completed"`
+	SentAt     time.Time  `json:"sent_at"`
+	ReceivedAt *time.Time `json:"received_at"`
+	StartTerm  uint64     `json:"start_term"`
 }
 
 type MemStats struct {

@@ -185,6 +185,7 @@ func (c *calculator) restore() {
 		if !job.Completed {
 			job.Lost = true
 		}
+
 	}
 
 	log.Printf("PI number: %s", c.PI.Text('f', -1))
@@ -305,5 +306,20 @@ func (c *calculator) merge() {
 func (c *calculator) stop() {
 	c.stopped = true
 	c.mergeTimer.Cancel()
+	c.save()
+}
+
+func (c *calculator) onConnect(worker worker) {
+	c.jobMutex.Lock()
+	defer c.jobMutex.Unlock()
+
+	for _, job := range c.Jobs {
+		// this indicates a job was lost, so forget jobs
+		if !job.Completed && job.WorkerName == worker.name {
+			job.Lost = true
+			log.Printf("Job %d of %s marked as lost.", job.ID, job.WorkerName)
+		}
+	}
+
 	c.save()
 }

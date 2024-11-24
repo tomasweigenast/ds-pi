@@ -126,10 +126,12 @@ func updateStats() {
 
 	go func() {
 		for range ticker2.C {
+			statsMutex.Lock()
 			piStats := app.PIStats()
 			broadcastStats(stats.Stats{
 				PI: &piStats,
 			})
+			statsMutex.Unlock()
 		}
 	}()
 }
