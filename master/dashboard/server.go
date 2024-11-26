@@ -115,24 +115,26 @@ func broadcastStats(stats stats.Stats) {
 func updateStats() {
 
 	ticker := time.NewTicker(1 * time.Second)
-	ticker2 := time.NewTicker(10 * time.Second)
+	// ticker2 := time.NewTicker(10 * time.Second)
 	// piValue := 3.0
 
 	go func() {
 		for range ticker.C {
 			serverStats := app.Stats()
+			piStats := app.PIDecimals()
 			broadcastStats(stats.Stats{
 				Server: &serverStats,
+				PI:     &piStats,
 			})
 		}
 	}()
 
-	go func() {
-		for range ticker2.C {
-			piStats := app.PIStats()
-			broadcastStats(stats.Stats{
-				PI: &piStats,
-			})
-		}
-	}()
+	// go func() {
+	// 	for range ticker2.C {
+	// 		piStats := app.PIStats()
+	// 		broadcastStats(stats.Stats{
+	// 			PI: &piStats,
+	// 		})
+	// 	}
+	// }()
 }
