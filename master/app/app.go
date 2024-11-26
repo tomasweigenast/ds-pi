@@ -55,6 +55,13 @@ func PIStats() stats.PIStats {
 	return a.pi_stats()
 }
 
+func PIDecimals() stats.PIStats {
+	return stats.PIStats{
+		DecimalCount: a.calculator.CurrentDecimalCount(),
+		PI:           "3.1415926535897932384626433832795028841971693993751058209749445923078164062862089986280348253421170679",
+	}
+}
+
 func (a *app) pi_stats() stats.PIStats {
 	pi := a.calculator.PI.Text('f', -1)
 	if len(pi) < 2 {

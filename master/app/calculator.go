@@ -20,6 +20,8 @@ import (
 
 const filename = "calc.state"
 
+var currentDecimalCount = 0
+
 type calculator struct {
 	jobMutex    sync.Mutex
 	sumMutex    sync.Mutex
@@ -75,6 +77,12 @@ func new_calculator() *calculator {
 
 	c.mergeTimer = shared.NewTimer(10*time.Second, func() {
 		c.merge()
+	})
+
+	shared.NewTimer(1*time.Minute, func() {
+		log.Printf("Calculating decimals of PI...")
+		currentDecimalCount = countDecimals(c.PI)
+		log.Printf("New decimal count is: %d", currentDecimalCount)
 	})
 
 	return c
@@ -282,9 +290,6 @@ func (c *calculator) restore() {
 	// 	}
 	// }
 
-	log.Printf("Counting decimals...")
-	number := c.PI.Text('f', -1)
-	log.Printf("Decimals of PI: %d", len(number))
 	// log.Printf("Decimals of PI calculated: %d", countDecimals(c.PI))
 
 	c.save()
@@ -376,7 +381,10 @@ func (c *calculator) merge() {
 	// Copy result
 	log.Printf("Copying temp into PI...")
 	c.PI.Copy(c.tempPI)
+
 	log.Printf("Copied!")
+	// log.Printf("Copied! New decimals are: %d", countDecimals(c.PI))
+
 	log.Printf("Merged %d jobs in %s.", len(buffer), time.Since(start))
 
 	c.bufferMutex.Lock()
@@ -421,4 +429,33 @@ func (c *calculator) onConnect(worker worker) {
 	}
 
 	c.save()
+}
+
+func (a *calculator) CurrentDecimalCount() int {
+	if currentDecimalCount == 0 {
+		currentDecimalCount = countDecimals(a.PI)
+	}
+
+	return currentDecimalCount
+}
+
+func countDecimals(x *big.Float) int {
+	// Prepare a threshold to determine integer status.
+	// threshold := new(big.Float).SetPrec(x.Prec()).SetInt64(1)
+	zero := new(big.Float).SetInt64(0)
+
+	// Create a copy of x to avoid modifying the original.
+	temp := new(big.Float).Copy(x)
+	decimals := 0
+
+	for temp.Cmp(zero) != 0 {
+		_, acc := temp.Int(nil) // Check if the value is an integer.
+		if acc == big.Exact {
+			break
+		}
+		temp.Mul(temp, big.NewFloat(10)) // Multiply by 10.
+		decimals++
+	}
+
+	return decimals
 }
