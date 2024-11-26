@@ -1,7 +1,8 @@
 package app
 
 import (
-	"encoding/json"
+	"bytes"
+	"encoding/gob"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -36,6 +37,14 @@ type calculator struct {
 	stopped    bool
 }
 
+type saveObj struct {
+	Jobs      map[uint64]WorkerJob
+	LastTerm  uint64
+	LastJobID uint64
+	PIPrec    uint
+	PI        string
+}
+
 type WorkerJob struct {
 	ID         uint64
 	SendAt     time.Time
@@ -45,7 +54,8 @@ type WorkerJob struct {
 	WorkerName string // the name of the worker who owns the job
 	FirstTerm  uint64
 	NumTerms   uint64
-	Result     []byte `json:"-"`
+	Result     []byte
+	ResultPrec uint
 }
 
 type mergeRequest struct {
@@ -146,19 +156,42 @@ func (c *calculator) complete_job(jobId uint64, result []byte, precision uint) {
 }
 
 func (c *calculator) save() {
-	c.saveMutex.Lock()
-	defer c.saveMutex.Unlock()
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("Recovered from a panic trying to save file")
+			}
+		}()
 
-	buf, err := json.MarshalIndent(c, "", "   ")
-	if err != nil {
-		log.Printf("unable to encode calculator state: %s", err)
-		return
-	}
+		c.saveMutex.Lock()
+		defer c.saveMutex.Unlock()
 
-	err = os.WriteFile(filename, buf, os.ModePerm)
-	if err != nil {
-		log.Printf("unable to save calculator state to file: %s", err)
-	}
+		log.Printf("Saving state...")
+
+		buf := bytes.Buffer{}
+		obj := saveObj{
+			LastTerm:  c.LastTerm,
+			LastJobID: c.LastJobID,
+			Jobs:      make(map[uint64]WorkerJob, len(c.Jobs)),
+			PIPrec:    c.PI.Prec(),
+			PI:        c.PI.Text('f', -1),
+		}
+		for jobId, job := range c.Jobs {
+			obj.Jobs[jobId] = *job
+		}
+		err := gob.NewEncoder(&buf).Encode(obj)
+		if err != nil {
+			log.Printf("Unable to encode calculator state: %s", err)
+			return
+		}
+
+		log.Printf("State encoded, saving...")
+		err = os.WriteFile(filename, buf.Bytes(), os.ModePerm)
+		if err != nil {
+			log.Printf("unable to save calculator state to file: %s", err)
+		}
+		log.Printf("State saved.")
+	}()
 }
 
 func (c *calculator) restore() {
@@ -175,9 +208,26 @@ func (c *calculator) restore() {
 
 	defer file.Close()
 
-	err = json.NewDecoder(file).Decode(c)
+	obj := saveObj{}
+	err = gob.NewDecoder(file).Decode(&obj)
 	if err != nil {
 		log.Printf("unable to read calculator state from bytes: %s", err)
+	}
+
+	c.LastJobID = obj.LastJobID
+	c.LastTerm = obj.LastTerm
+	for jobId, job := range obj.Jobs {
+		c.Jobs[jobId] = &WorkerJob{
+			ID:         job.ID,
+			SendAt:     job.SendAt,
+			ReturnedAt: job.ReturnedAt,
+			Completed:  job.Completed,
+			Lost:       job.Lost,
+			WorkerName: job.WorkerName,
+			FirstTerm:  job.FirstTerm,
+			NumTerms:   job.NumTerms,
+			Result:     job.Result,
+		}
 	}
 
 	for _, job := range c.Jobs {
@@ -185,10 +235,57 @@ func (c *calculator) restore() {
 		if !job.Completed {
 			job.Lost = true
 		}
-
 	}
 
-	log.Printf("PI number: %s", c.PI.Text('f', -1))
+	c.PI.SetPrec(obj.PIPrec)
+	_, ok := c.PI.SetString(obj.PI)
+	if !ok {
+		log.Printf("Unable to restore PI")
+		return
+	}
+
+	// merge all jobs into PI
+	// c.PI.SetPrec(5000000)
+
+	// mergeableJobs := 0
+	// mergedJobs := 0
+	// for _, job := range c.Jobs {
+	// 	if job.Completed && job.Result != nil && len(job.Result) > 0 {
+	// 		mergeableJobs++
+	// 	}
+	// }
+
+	// for _, job := range c.Jobs {
+	// 	if job.Completed && job.Result != nil && len(job.Result) > 0 {
+	// 		pi := big.NewFloat(0).SetPrec(job.ResultPrec)
+	// 		if err := pi.GobDecode(job.Result); err != nil {
+	// 			log.Printf("Invalid big.Float bytes, ignoring marking the job [%d] as lost", job.ID)
+	// 			job.Lost = true
+	// 			job.Completed = false
+	// 			continue
+	// 		}
+
+	// 		count := 0
+	// 		log.Printf("Going to merge job %d [%s]", job.ID, pi.Text('g', -1))
+	// 		for count < 6 {
+	// 			c.PI.Add(c.PI, pi)
+
+	// 			if pi.Acc() == big.Exact {
+	// 				break
+	// 			}
+
+	// 			log.Printf("Unable to sum job [%d] without losing precision, trying to increment precision and trying again", job.ID)
+	// 			count++
+	// 		}
+	// 		mergedJobs++
+	// 		log.Printf("Job %d merged. %d of %d", job.ID, mergedJobs, mergeableJobs)
+	// 	}
+	// }
+
+	log.Printf("Counting decimals...")
+	number := c.PI.Text('f', -1)
+	log.Printf("Decimals of PI: %d", len(number))
+	// log.Printf("Decimals of PI calculated: %d", countDecimals(c.PI))
 
 	c.save()
 }
@@ -295,6 +392,8 @@ func (c *calculator) merge() {
 		if job, ok := c.Jobs[mergeReq.jobId]; ok {
 			job.Completed = true
 			job.ReturnedAt = &now
+			job.Result = mergeReq.result
+			job.ResultPrec = mergeReq.precision
 			delete(c.buffer, job.ID)
 		}
 	}
