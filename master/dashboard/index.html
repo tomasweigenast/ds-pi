@@ -328,6 +328,7 @@
         }
 
         const now = Date.now();
+        stats.workers.sort((a, b) => a.id.localeCompare(b.id));
         workerList.innerHTML = stats.workers
           .map((worker) => {
             const secondsSinceLastPing =
