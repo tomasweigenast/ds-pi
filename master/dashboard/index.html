@@ -414,7 +414,7 @@
       }
 
       // WebSocket event handlers
-      const ws = new WebSocket("ws://localhost:80/ws");
+      const ws = new WebSocket("ws://{{ip}}:80/ws");
       ws.onopen = () => {
         console.log("Connected to server");
       };

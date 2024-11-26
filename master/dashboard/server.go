@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"ds-pi.com/master/app"
+	"ds-pi.com/master/shared"
 	"ds-pi.com/master/stats"
 	"github.com/gorilla/websocket"
 )
@@ -56,6 +57,12 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/html")
+
+	ip, err := shared.GetIPv4()
+	if err == nil {
+		dataStr := strings.ReplaceAll(string(data), "{{ip}}", ip.String())
+		data = []byte(dataStr)
+	}
 	w.Write(data)
 }
 
