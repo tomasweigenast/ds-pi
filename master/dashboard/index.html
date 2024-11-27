@@ -272,16 +272,6 @@
             <div class="stat-value" id="sysMem">0 B</div>
           </div>
         </div>
-        <div class="variables-list">
-          <h3 class="card-title">Variable Memory Usage</h3>
-          <div id="variablesList">
-            <!-- Variable memory items will be inserted here -->
-          </div>
-          <div class="stat-item">
-            <div class="stat-label">Total Variable Allocation</div>
-            <div class="stat-value" id="totalVariableAlloc">0 B</div>
-          </div>
-        </div>
       </div>
     </div>
 
@@ -295,8 +285,6 @@
       const totalAlloc = document.getElementById("totalAlloc");
       const freedMemory = document.getElementById("freedMemory");
       const sysMem = document.getElementById("sysMem");
-      const variablesList = document.getElementById("variablesList");
-      const totalVariableAlloc = document.getElementById("totalVariableAlloc");
       const jobList = document.getElementById("jobList");
 
       let termSize = 0;
@@ -398,21 +386,6 @@
           .join("");
       }
 
-      function updateVariables(variables, total) {
-        variables.sort((a, b) => a.varName.localeCompare(b.varName));
-        variablesList.innerHTML = variables
-          .map(
-            (variable) => `
-              <div class="variable-item">
-                <span>${variable.varName}</span>
-                <span>${formatBytes(variable.alloc)}</span>
-              </div>
-            `
-          )
-          .join("");
-        totalVariableAlloc.textContent = formatBytes(total);
-      }
-
       // WebSocket event handlers
       const ws = new WebSocket("ws://{{ip}}:80/ws");
       ws.onopen = () => {
@@ -440,7 +413,6 @@
             totalAlloc.textContent = formatBytes(memory.totalAlloc);
             freedMemory.textContent = formatBytes(memory.freed);
             sysMem.textContent = formatBytes(memory.sysMem);
-            updateVariables(memory.variables, memory.totalVariableAlloc);
           }
 
           if (data.server.termSize) {

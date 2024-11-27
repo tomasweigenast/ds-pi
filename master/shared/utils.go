@@ -73,18 +73,6 @@ func PrintMemUsage(variables map[string]any) {
 	buf.WriteString(fmt.Sprintf("%-30s %-30s %-30s\n",
 		fmt.Sprintf("Sys = %s", formatBytes(m.Sys)), fmt.Sprintf("NumGC = %s", formatBytes(uint64(m.NumGC))), fmt.Sprintf("Mallocs = %s", formatBytes(m.Mallocs))))
 
-	if len(variables) > 0 {
-		buf.WriteString("\nVariables:\n")
-		totalSize := uint64(0)
-		for name, variable := range variables {
-			size := SizeOf(variable)
-			if size > 0 {
-				totalSize += uint64(size)
-				buf.WriteString(fmt.Sprintf("\t%s = %s\n", name, formatBytes(uint64(size))))
-			}
-		}
-		buf.WriteString(fmt.Sprintf("\tTotal = %s\n", formatBytes(uint64(totalSize))))
-	}
 	buf.WriteString("------------------------------------------------------------------------------------\n")
 
 	fmt.Print(buf.String())
@@ -94,24 +82,11 @@ func GetMemStats(variables map[string]any) stats.MemStats {
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
 
-	var varMem []stats.VariableMem
-	var totalVariableAlloc uint64
-	if len(variables) > 0 {
-		for name, variable := range variables {
-			size := SizeOf(variable)
-			if size > 0 {
-				totalVariableAlloc += uint64(size)
-				varMem = append(varMem, stats.VariableMem{VariableName: name, Alloc: uint64(size)})
-			}
-		}
-	}
 	return stats.MemStats{
-		Allocated:          m.Alloc,
-		TotalAlloc:         m.TotalAlloc,
-		Freed:              m.TotalAlloc - m.Alloc,
-		SysMem:             m.Sys,
-		Variables:          varMem,
-		TotalVariableAlloc: totalVariableAlloc,
+		Allocated:  m.Alloc,
+		TotalAlloc: m.TotalAlloc,
+		Freed:      m.TotalAlloc - m.Alloc,
+		SysMem:     m.Sys,
 	}
 }
 

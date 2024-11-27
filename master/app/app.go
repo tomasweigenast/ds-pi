@@ -78,12 +78,7 @@ func (a *app) pi_stats() stats.PIStats {
 }
 
 func (a *app) stats() stats.ServerStats {
-	memStats := shared.GetMemStats(map[string]any{
-		"pi":          a.calculator.PI,
-		"temp_pi":     a.calculator.tempPI,
-		"jobs":        &a.calculator.Jobs,
-		"merge_queue": &a.calculator.buffer,
-	})
+	memStats := shared.GetMemStats(map[string]any{})
 	workers := make([]stats.Worker, 0, len(a.wr.workers))
 	jobs := make([]stats.Job, 0, len(a.calculator.Jobs))
 	for name, worker := range a.wr.workers {
