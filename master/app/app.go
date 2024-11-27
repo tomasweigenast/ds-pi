@@ -105,7 +105,7 @@ func (a *app) stats() stats.ServerStats {
 		})
 	}
 	return stats.ServerStats{
-		TermSize: config.TermSize,
+		TermSize: a.calculator.TermSize,
 		Memory:   memStats,
 		Workers:  workers,
 		Jobs:     jobs,

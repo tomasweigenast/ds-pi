@@ -31,6 +31,7 @@ type calculator struct {
 	buffer    map[uint64]mergeRequest
 	Jobs      map[uint64]*WorkerJob
 	LastTerm  uint64
+	TermSize  uint64
 	LastJobID uint64
 	PI        *big.Float
 	tempPI    *big.Float
@@ -43,6 +44,7 @@ type saveObj struct {
 	Jobs      map[uint64]WorkerJob
 	LastTerm  uint64
 	LastJobID uint64
+	TermSize  uint64
 	PIPrec    uint
 	PI        string
 }
@@ -68,11 +70,12 @@ type mergeRequest struct {
 
 func new_calculator() *calculator {
 	c := &calculator{
-		buffer:  make(map[uint64]mergeRequest),
-		Jobs:    make(map[uint64]*WorkerJob),
-		PI:      big.NewFloat(0).SetPrec(50_000),
-		tempPI:  big.NewFloat(0).SetPrec(50_000),
-		stopped: false,
+		buffer:   make(map[uint64]mergeRequest),
+		Jobs:     make(map[uint64]*WorkerJob),
+		PI:       big.NewFloat(0).SetPrec(50_000),
+		TermSize: config.TermSize,
+		tempPI:   big.NewFloat(0).SetPrec(50_000),
+		stopped:  false,
 	}
 
 	c.mergeTimer = shared.NewTimer(10*time.Second, func() {
@@ -131,12 +134,12 @@ func (c *calculator) get_job(workerName string) WorkerJob {
 			SendAt:     time.Now(),
 			WorkerName: workerName,
 			FirstTerm:  startTerm,
-			NumTerms:   config.TermSize,
+			NumTerms:   c.TermSize,
 		}
 
 		c.Jobs[job.ID] = job
 		c.LastJobID++
-		c.LastTerm = job.FirstTerm + config.TermSize
+		c.LastTerm = job.FirstTerm + c.TermSize
 		log.Printf("Gave new job [id=%d] to worker %s", job.ID, workerName)
 	}
 
@@ -180,6 +183,7 @@ func (c *calculator) save() {
 		obj := saveObj{
 			LastTerm:  c.LastTerm,
 			LastJobID: c.LastJobID,
+			TermSize:  c.TermSize,
 			Jobs:      make(map[uint64]WorkerJob, len(c.Jobs)),
 			PIPrec:    c.PI.Prec(),
 			PI:        c.PI.Text('f', -1),
@@ -224,6 +228,7 @@ func (c *calculator) restore() {
 
 	c.LastJobID = obj.LastJobID
 	c.LastTerm = obj.LastTerm
+	c.TermSize = obj.TermSize
 	for jobId, job := range obj.Jobs {
 		c.Jobs[jobId] = &WorkerJob{
 			ID:         job.ID,
@@ -396,16 +401,29 @@ func (c *calculator) merge() {
 
 	log.Printf("Total jobs in buffer before delete: %d", len(c.buffer))
 	now := time.Now()
-	for _, mergeReq := range buffer {
+	var lastJob WorkerJob
+	for i, mergeReq := range buffer {
 		if job, ok := c.Jobs[mergeReq.jobId]; ok {
 			job.Completed = true
 			job.ReturnedAt = &now
 			job.Result = mergeReq.result
 			job.ResultPrec = mergeReq.precision
 			delete(c.buffer, job.ID)
+
+			if i == len(buffer)-1 {
+				lastJob = *job
+			}
 		}
 	}
 	log.Printf("Total jobs in buffer now: %d", len(c.buffer))
+
+	if time.Since(lastJob.SendAt) > 10*time.Second && c.TermSize > 10 {
+		c.TermSize = c.TermSize - (c.TermSize / 10)
+		if c.TermSize <= 10 {
+			c.TermSize = 10
+		}
+		log.Printf("TermSize reduced to %d", c.TermSize)
+	}
 
 	c.save()
 }

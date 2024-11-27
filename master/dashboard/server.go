@@ -37,6 +37,7 @@ func Start() {
 	// Start WebSocket server in a goroutine
 	go func() {
 		mux := http.NewServeMux()
+
 		mux.HandleFunc("/ws", handleWebSocket)
 		mux.HandleFunc("/pi", handlePI)
 		mux.HandleFunc("/", handleIndex)
@@ -67,6 +68,16 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 }
 
 func handlePI(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html")
+	w.Header().Set("Transfer-Encoding", "chunked")
+	w.WriteHeader(http.StatusOK)
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "Streaming unsupported!", http.StatusInternalServerError)
+		return
+	}
+
 	pi := app.PIStats().PI
 	data, err := content.ReadFile("pi.html")
 	if err != nil {
@@ -76,8 +87,8 @@ func handlePI(w http.ResponseWriter, r *http.Request) {
 
 	stringContent := string(data)
 	stringContent = strings.ReplaceAll(stringContent, "{{pi}}", pi)
-	w.Header().Set("Content-Type", "text/html")
 	w.Write([]byte(stringContent))
+	flusher.Flush()
 }
 
 func handleWebSocket(w http.ResponseWriter, r *http.Request) {
