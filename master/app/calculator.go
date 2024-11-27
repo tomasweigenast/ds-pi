@@ -417,8 +417,8 @@ func (c *calculator) merge() {
 	}
 	log.Printf("Total jobs in buffer now: %d", len(c.buffer))
 
-	if time.Since(lastJob.SendAt) > 10*time.Second && c.TermSize > 10 {
-		c.TermSize = c.TermSize - (c.TermSize / 10)
+	if time.Since(lastJob.SendAt) > 10*time.Minute && c.TermSize > 10 {
+		c.TermSize = c.TermSize - (c.TermSize * 5 / 100)
 		if c.TermSize <= 10 {
 			c.TermSize = 10
 		}
